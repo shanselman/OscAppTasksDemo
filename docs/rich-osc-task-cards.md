@@ -104,7 +104,7 @@ synthetic markers with that shell's own markers creates ambiguous nesting: OSC 1
 has no producer/task ID. Duplicate-transition guards are useful against repeated
 or misbehaving output, but cannot authenticate a finish event or resolve ownership.
 Meaningful activity titles, progress and a real exit code are the agent pattern;
-shell lifecycle comes from the shell. See [CLI modes](../README.md#normal-coding-agent-mode-vs-direct-host-fixture).
+shell lifecycle comes from the shell. See [the CLI-author recipe and ownership rules](../README.md#what-a-cli-author-needs-to-do).
 
 Ordinary output remains narrative. Do not automatically convert log lines into
 steps, questions, buttons, or results.

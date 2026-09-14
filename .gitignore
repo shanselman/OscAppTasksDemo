@@ -7,6 +7,7 @@
 *.pem
 *.key
 *.log
+*.saved.bak
 .env
 .env.*
 !.env.example

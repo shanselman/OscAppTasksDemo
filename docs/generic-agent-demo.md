@@ -50,10 +50,13 @@ The native launcher also supports an explicit `-AgentPath <published-exe>` and
 labels stay fixed. Native launching/building and package registration belong to
 that repository, not `Show-Demo.ps1`; this document specifies the coordinated
 interface rather than bundling or downloading the native implementation.
-The native peer published it on `shanselman/terminal` branch `demo/osc-app-tasks`,
-commit `055a2ce8de96987c27dc604f86893a16a4e15c33`:
-[native walkthrough](https://github.com/shanselman/terminal/blob/055a2ce8de96987c27dc604f86893a16a4e15c33/doc/shell-task-demo.md)
-and [launcher source](https://github.com/shanselman/terminal/blob/055a2ce8de96987c27dc604f86893a16a4e15c33/samples/ShellTaskDemo/Start-Demo.ps1).
+The native peer publishes it on
+[`shanselman/terminal`, branch `demo/osc-app-tasks`](https://github.com/shanselman/terminal/tree/demo/osc-app-tasks):
+[current native walkthrough](https://github.com/shanselman/terminal/blob/demo/osc-app-tasks/doc/shell-task-demo.md)
+and [current launcher source](https://github.com/shanselman/terminal/blob/demo/osc-app-tasks/samples/ShellTaskDemo/Start-Demo.ps1).
+The launch-argument correction landed in `e848393`; docs/crosslinks were published
+at `3df5a6f55fa25f16737a951eea7759281cc44232`. Prefer the current branch instructions
+over the initial `055a2ce` launcher revision.
 
 No fixture runs automatically inside the launched shell. Its genuine foreground
 command lifecycle owns C/D. Do **not** add `--synthetic-shell-markers` to these

@@ -1,388 +1,348 @@
-# OSC to Windows Shell App Tasks
+# OSC App Tasks Demo
 
-A local, presentation-ready proof of this pipeline:
+Turn ordinary command-line activity into a **real Windows Shell task card**, using
+existing terminal escape sequences rather than an agent-specific integration.
 
-```text
-Fake C# agent -> redirected stdout bytes -> incremental OSC parser
-             -> one-command lifecycle -> real AppTaskInfo -> Windows Shell
+## Three pieces, two ways to try it
+
+| Piece | What it does | Where to start |
+|---|---|---|
+| **1. All-in-one Windows demo app** | A packaged WinUI window bundles the fake CLI and shows process output, decoded OSC, local state, and real `AppTaskInfo` results side by side. **No custom Terminal needed.** | [Route A](#route-a-all-in-one-windows-demo) |
+| **2. Independent CLI demo app** | `OscTasks.Agent` emits safe sample titles, progress, narrative, and a process exit code. No WinRT, package identity, agent login, network, or model service. | [CLI/presenter commands](#the-cli-and-presenter-script) |
+| **3. Custom Windows Terminal Dev** | The native Terminal owns the packaged broker and publishes cards for ordinary foreground CLI programs. The Shell draws a separate task surface; Terminal does not paint an imitation. | [Our fork branch][native-branch], [native guide][native-guide], [launcher][native-launcher], [Route B](#route-b-cli-inside-the-custom-terminal) |
+
+The Windows app is a **self-contained demonstration experience**, not a promise
+of zero runtime/package prerequisites. The current Debug x64 WinUI host includes
+its .NET runtime, but depends on the Windows App SDK framework package; its bundled
+CLI is explicitly **framework-dependent** and requires installed .NET 10.
+The native Terminal is C++/WinRT; .NET 10 is needed for this sample CLI, not for
+Terminal itself.
+
+This is a fork demonstration, **not stock Windows Terminal support, an upstream
+PR, or an upstream-approved design**.
+
+## Prerequisites
+
+| For | Requirements |
+|---|---|
+| Real Shell cards | Windows 11 with the experimental App Tasks rollout available. APIs began gradual rollout in May 2026; build number alone is not proof. The provider checks API presence/support and reports failures. |
+| Building/running this CLI | .NET **10 SDK** to build; .NET **10 runtime** to run the published framework-dependent executable. PowerShell 7 for presenter scripts. |
+| Route A: WinUI host | Developer Mode, current WinApp CLI (`winapp` >= 0.3; 0.6.0 used here), package identity and Windows App SDK runtime dependencies. The build restores Windows App SDK **2.4.0**, SDK BuildTools **10.0.28000.2705**, BuildTools.WinApp **0.6.1**, and Windows SDK projection **10.0.26100.87**. Older projections may lack AppTaskInfo. |
+| Route B: native Terminal | Follow the fork's [native build workflow][native-building] and [demo build/registration instructions][native-guide]. Native C++ **UWP/XAML** tooling is required, not just desktop C++ Build Tools. The verified build used VS2026 with UWP C++ v145 and a serviced Windows SDK 10.0.26100.0 containing the AppTask contract/projection. Submodules and repository NuGet configuration matter. |
+
+Debug x64 is the validated demo build configuration. The OSC script accepts
+ARM64, but ARM64, Release/trimming, and unsupported Windows behavior have not been
+verified. Scripts do not install prerequisites, trust certificates, or change
+profiles/system settings. In a WinUI-enabled Copilot environment, `/winui-setup`
+can help establish missing Route A prerequisites.
+
+## Get the OSC repository
+
+**From a PowerShell 7 window**, choose a parent directory. These examples use
+sibling checkouts under your home directory; change `$DemoRoot` if desired:
+
+```powershell
+$DemoRoot = Join-Path $HOME 'source\osc-shell-demo'
+New-Item -ItemType Directory -Force $DemoRoot | Out-Null
+Set-Location $DemoRoot
+git clone https://github.com/shanselman/OscAppTasksDemo.git
+Set-Location .\OscAppTasksDemo
 ```
 
-The packaged WinUI host shows **process output**, **decoded OSC events**, and
-**actual Shell API results** side by side. A separately labeled **local preview**
-shows the interpreted state even when Shell support is unavailable.
+All Route A commands below run **from the `OscAppTasksDemo` checkout**.
 
-**This is a process-output demo, not a terminal emulator.** It does not use
-ConPTY, intercept another application's Windows Terminal output, or run an
-interactive shell. The fake agent makes no AI/network calls and modifies no user
-files. The host does create persistent, real Windows Shell tasks.
+## Route A: all-in-one Windows demo
 
-For the implemented compatible activity/step tier and the separately proposed
-structured extension, see [Rich OSC task cards](docs/rich-osc-task-cards.md).
-For commit-pinned upstream attachment points and obstacles, see
-[intelligent-terminal integration findings](docs/intelligent-terminal-integration.md).
-For the generic model, calibrated real-agent observations, native handoff and
-presentation walkthrough, see [Generic agent demo](docs/generic-agent-demo.md).
+**From `OscAppTasksDemo`:**
 
-## Present the generic demo
+```powershell
+.\Demo.ps1
+```
+
+This publishes the agent, builds the WinUI host, registers its development
+package with WinApp, and launches it with package identity. It stays attached
+for debug output until the app exits. Never launch `OscTasks.Host.exe` directly,
+remove its manifest, or substitute an unpackaged build.
+
+In the window, choose **conversation** or **title-only**, then **Run / replay**.
+You can see changing titles in the decoded stream while the default Shell label
+stays fixed. Enable **OPT-IN: publish application titles** before another run
+only if exposing those titles is acceptable. The new choices apply per run.
+
+For a progress demonstration, choose **success**: 10%, 45%, 65%, 100%, clear, and
+then the explicit process outcome. Choose **failure** to show error styling
+followed later by failure. Only the actual outcome finishes the task.
+
+The optional **legacy step fixture** checkbox interprets sequential title changes
+as completed activities. It is explicitly nonstandard, requires title opt-in,
+and is disabled for generic title-only/conversation fixtures. **The native generic
+Terminal path never uses this title-to-step heuristic.**
+
+The left pane is redirected stdout, **not a terminal emulator or ConPTY**.
+The right pane distinguishes actual API results from a labeled local preview.
+On supported Windows, inspect the separate Shell card. **Reset view** only clears
+the host's view; **Clear demo tasks** explicitly removes its persisted demo cards.
+Leave cards alone until you are done presenting.
+
+**From `OscAppTasksDemo`, for alternate entrypoints:**
+
+```powershell
+.\Show-Demo.ps1 -Mode Standalone -Build  # Same packaged demo route
+.\Demo.ps1 -BuildOnly                  # Build; do not register/relaunch
+.\Demo.ps1 -Test                       # Automated checks, no Shell cards
+```
+
+Close the host before a normal rebuild/relaunch. A build-only operation does not
+refresh an already registered layout or a running instance.
+
+## Route B: CLI inside the custom Terminal
+
+Use **[the `demo/osc-app-tasks` branch of our Terminal fork][native-branch]**,
+not an installed stock Terminal. The native package is built/registered separately.
+Detailed prerequisites, build, loose-layout registration, diagnostics and manual
+checks live in the [native guide][native-guide]; the
+[presenter launcher source][native-launcher] is the reproducible launch contract.
+
+**From the same parent directory used above** (redefine `$DemoRoot` in a new shell):
+
+```powershell
+$DemoRoot = Join-Path $HOME 'source\osc-shell-demo'
+Set-Location $DemoRoot
+git clone --branch demo/osc-app-tasks --recurse-submodules https://github.com/shanselman/terminal.git TerminalDemo
+```
+
+**From `OscAppTasksDemo`, publish the marker-free fixture:**
+
+```powershell
+Set-Location (Join-Path $DemoRoot 'OscAppTasksDemo')
+.\Demo.ps1 -AgentOnly
+```
+
+This needs no WinUI/WinApp setup. The result is
+`OscAppTasksDemo\artifacts\agent\OscTasks.Agent.exe`.
+
+**From `TerminalDemo`, follow the [native guide][native-guide] to build and
+register the Debug x64 Dev package**, using its required developer toolchain.
+Do not assume an unsigned MSIX can be installed by double-clicking. Use the
+documented developer/loose-layout registration workflow; do not bypass certificate
+or OS warnings or add unapproved certificate trust.
+
+Then **from `TerminalDemo`, in non-elevated PowerShell 7**, close existing
+**Dev** windows yourself and run:
+
+```powershell
+$DemoRoot = Join-Path $HOME 'source\osc-shell-demo'
+$OscCheckout = (Resolve-Path (Join-Path $DemoRoot 'OscAppTasksDemo')).Path
+Set-Location (Join-Path $DemoRoot 'TerminalDemo')
+.\samples\ShellTaskDemo\Start-Demo.ps1 -OscDemoPath $OscCheckout -MirrorTitles -CheckOnly
+.\samples\ShellTaskDemo\Start-Demo.ps1 -OscDemoPath $OscCheckout -MirrorTitles
+```
+
+`-MirrorTitles` is an explicit privacy choice for this synthetic demonstration.
+Omit it for the fixed-label comparison. The first non-elevated Dev process owns
+its feature environment until it exits: setting variables inside an existing pane
+does not enable it. Close Dev and relaunch to change the opt-ins. The launcher
+checks for existing Dev processes and never kills them.
+
+It sets process-local `WT_ENABLE_SHELL_TASKS=1` and independently controls
+`WT_SHELL_TASK_TITLES=1`, starts an isolated integrated shell, and exposes
+`$DemoAgent`. It does not modify permanent profiles/environment or auto-run agents.
+An explicit `-AgentPath <published-exe>` is also supported.
+
+**Inside the newly opened custom Terminal demo shell**, type these normal
+foreground commands; no particular working folder is required because
+`$DemoAgent` is an absolute path:
+
+```powershell
+& $DemoAgent title-only --delay-ms 2000
+& $DemoAgent conversation --delay-ms 2000
+& $DemoAgent success --delay-ms 2000
+& $DemoAgent failure --delay-ms 2000
+```
+
+The native demo skips commands shorter than two seconds and keeps at most one
+card per connection; a new command can replace the preceding card. In
+**conversation**, the simulated answer is followed by a bounded open interval.
+The card remains **Session active**: an answer is not process exit or an agent turn
+completion signal. Clear/100% never supply completion.
+
+## The CLI and presenter script
+
+**From `OscAppTasksDemo`, in your current terminal:**
 
 ```powershell
 .\Show-Demo.ps1 -Build
-```
-
-This runs the bounded, marker-free `conversation` fixture in the **current**
-terminal, publishing only the agent binary via `Demo.ps1 -AgentOnly`. It does not
-launch a native terminal or install a provider. Use the configured custom Terminal
-and integrated shell for Shell cards; an ordinary terminal just shows output.
-Application-title publication is a separate, default-off privacy opt-in.
-Other useful commands:
-
-```powershell
 .\Show-Demo.ps1 -Scenario title-only
 .\Show-Demo.ps1 -Scenario success -DelayMs 2000
 .\Show-Demo.ps1 -Scenario failure -DelayMs 2000
-.\Show-Demo.ps1 -Mode Standalone -Build
 .\Show-Demo.ps1 -ValidateOnly
-```
-
-## Standalone host quick start
-
-From this repository in PowerShell:
-
-```powershell
-.\Demo.ps1
-```
-
-This publishes the agent, builds the host, registers a development package with
-`winapp`, and launches it with package identity and debug-output capture. The
-command stays attached until the app closes. Choose a scenario, then **Run / replay**.
-By default, Shell receives fixed labels, not application titles. A separate
-**OPT-IN: publish application titles** checkbox enables sanitized title display,
-with a privacy warning. The optional legacy step checkbox requires that opt-in
-and is disabled for `title-only`/`conversation`: generic titles are never steps or
-agent-turn outcomes. Both choices are locked during a run.
-
-```powershell
-.\Demo.ps1 -Test         # Standalone parser/lifecycle/real-subprocess tests
-.\Demo.ps1 -BuildOnly    # Build only; does NOT refresh an installed package
-.\Demo.ps1 -AgentOnly    # Publish marker-free CLI; no WinUI/winapp prerequisites
-.\Demo.ps1 -Platform ARM64   # ARM64 build/run option; not validated on ARM64
-```
-
-Close the existing host before a normal rebuild/relaunch. `-BuildOnly` leaves a
-running app and its registered layout untouched; run `.\Demo.ps1` to deploy new
-binaries. Never run `OscTasks.Host.exe` directly, remove the manifest, or switch
-the host to unpackaged mode.
-
-To show the independent CLI in your own terminal:
-
-```powershell
-dotnet run --project .\OscTasks.Agent -- success
-dotnet run --project .\OscTasks.Agent -- failure
-dotnet run --project .\OscTasks.Agent -- indeterminate
-```
-
-That terminal may render OSC title/progress itself, but these standalone commands
-do **not** create Shell tasks: the CLI has no Windows/WinRT dependencies. Only the
-packaged demo host in this repository bridges the captured stream to `AppTaskInfo`.
-A future custom terminal can supply that bridge instead.
-
-### Normal coding-agent mode vs direct-host fixture
-
-**The default CLI does not emit OSC 133 shell lifecycle markers.** It behaves like
-a coding agent: narrative on stdout, meaningful OSC 2 activity titles, OSC 9;4
-progress, and a real process exit code. OSC 9;4 carries no textual activity field;
-titles and progress are separate signals.
-
-Run the same ordinary command above inside the custom Terminal. Its surrounding
-shell must have shell integration enabled to supply `133;C` before execution and
-`133;D;<exitcode>` after exit. The terminal bridge combines those with the agent's
-activity/progress. Without that lifecycle source, titles, 100%, or clear alone
-cannot authorize task completion. Native-terminal integration is still planned,
-not implemented by this repository.
-
-The standalone WinUI host launches a child directly, without a shell. It therefore
-explicitly passes **`--synthetic-shell-markers`**, a visibly labeled **test-fixture
-option**, to exercise its parser/lifecycle pipeline. For direct-process harnesses:
-
-```powershell
-dotnet run --project .\OscTasks.Agent -- success --synthetic-shell-markers
 dotnet run --project .\OscTasks.Agent -- --help
 ```
 
-Do not pass that fixture flag when testing under a shell that already emits
-lifecycle markers. OSC 133 has no task/nesting IDs: a shell and a misbehaving child
-can emit ambiguous duplicate starts/finishes. Idempotent handling helps with
-repeated transitions but cannot prove which producer's finish is authoritative.
-Use one agreed lifecycle producer; do not recommend shell markers as part of the
-coding-agent output pattern. Arbitrary child output remains untrusted.
+The presenter defaults to marker-free **conversation**, publishes through
+`Demo.ps1 -AgentOnly` only when `-Build` is requested, and otherwise uses the
+existing agent executable. Rebuild explicitly after source updates.
+It does **not** launch/install native Terminal. In a stock terminal you get output
+and whatever OSC features it supports, not AppTask cards.
 
-## Requirements
+Scenarios: `title-only`, `conversation`, `success`, `failure`, `indeterminate`,
+`warning`, `unknown`, and `crash`. Pace is bounded by `--delay-ms 0..10000` or
+mutually exclusive `--fast`. Conversation waits at least two seconds after its
+answer at normal nonzero pace (default 4.8 seconds), then exits. No indefinite
+unattended input is required. `unknown` omits its outcome only in explicit fixture
+mode; the real CLI process still exits 0. `crash` is a simulated exit 7, not a
+native crash-dump test.
 
-| Requirement | Details |
+See the [generic presenter guide](docs/generic-agent-demo.md) for scenario details.
+
+## What a CLI author needs to do
+
+There are **three separate responsibilities**, not a CLI self-registration API:
+
+| Owner | Responsibility |
 |---|---|
-| Windows | Windows 11 with the experimental App Tasks rollout enabled for real cards; OS build number alone is not a support guarantee. |
-| .NET | .NET 10 SDK; projects target `net10.0`. Agent deployment is framework-dependent. |
-| Windows projection | `WindowsSdkPackageVersion` **10.0.26100.87**, explicitly pinned in Host and Shell; this projection includes `Windows.UI.Shell.Tasks`. Older projections may not. |
-| Windows App SDK | **2.4.0**, with Windows SDK BuildTools **10.0.28000.2705** and BuildTools.WinApp **0.6.1**, restored by the build. |
-| WinApp CLI | Installed `winapp` **>= 0.3**, current version recommended; **0.6.0** was used here. |
-| Development packaging | Developer Mode enabled and real package identity; the manifest declares the `com.microsoft.apptaskprovider` extension and a `Public` folder. |
-| Architecture | Debug x64 is the verified configuration. ARM64 is an unverified script option; Release/trimming is not validated. |
+| **CLI** | Optionally emit supported, safe existing OSC metadata and return a meaningful process exit code. No WinRT/package dependency, brand registration or new protocol. A title alone is useful; percentages are optional. |
+| **Shell** | Its shell integration supplies OSC 133 C/D for foreground command lifetime. The CLI must not emit these shell-owned markers under a real integrated shell. |
+| **User / host** | Enable task publication and, separately, consent to application-title mirroring. In this Dev fork those are the launcher/feature options above, not something a CLI may silently authorize. |
 
-For missing tooling, use `/winui-setup` in a WinUI-enabled Copilot environment.
-The demo script does not install prerequisites or change system settings.
-The WinUI project was scaffolded with `dotnet new winui-mvvm`; running the existing
-source does not require regenerating the template.
+**Illustrative C# CLI source**, not a command to run in either checkout:
 
-If an old developer alias shadows the installed current CLI, select the installed
-current executable through your **process-local PATH** before running the script.
-For example, if the official package-specific alias exists:
+```csharp
+bool emitOsc = !Console.IsOutputRedirected &&
+               Array.IndexOf(args, "--no-osc") < 0;
+void Osc(string payload)
+{
+    if (!emitOsc) return;
+    Console.Write($"\x1b]{payload}\x07"); // ESC ] payload BEL
+    Console.Out.Flush();
+}
 
-```powershell
-$env:PATH = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winapp_8wekyb3d8bbwe;$env:PATH"
-winapp --version
-.\Demo.ps1
+Osc("2;Preparing sample report"); // Safe display metadata, not task identity
+Osc("9;4;3;0");                 // Report indeterminate progress, if appropriate
+Console.WriteLine("Preparing the sample report...");
+// Perform actual work; report its real progress rather than inventing a percentage.
+Osc("9;4;1;65");
+Osc("9;4;0;0");                 // Hide progress, NOT a completion signal
+return 0;                       // Use a nonzero exit code if the work failed
 ```
 
-No global alias changes or uninstallations are needed.
+The exact title sequence is `\x1b]2;Preparing sample report\x07`. OSC 0 can also
+set a title; `\x1b\\` (ESC followed by backslash) can terminate OSC instead of BEL.
+This example intentionally emits **no OSC 133**.
+It illustrates encoding, not actual report work; the native demo skips commands
+that finish within two seconds. Use the paced fixtures for a visible presentation.
 
-## Three-minute presentation
+Prefer a terminal-attached stream, normally stdout, with an opt-out/no-escape
+mode when redirected. If choosing stderr, check whether it is terminal-attached
+and whether the intended host consumes it; the standalone demo parses stdout only.
+Our test CLI deliberately retains sequences in redirected stdout so the WinUI
+fixture can capture them. That is a harness choice, not a universal author default.
+Support for OSC 9;4 and passthrough through tmux/SSH/other hosts must be tested,
+not assumed. Never put secrets or private prompt/path text in a demo title.
 
-1. Launch `.\Demo.ps1`. Explain the three panes and the support banner. The left
-   pane is real captured stdout; the middle pane is decoded control traffic;
-   the right pane contains real API return/readback information, **not** a
-   painted imitation of the Shell.
-2. Select **success**, enable title publication only if wanted, optionally enable
-   the separate legacy step convention, and click
-   **Run / replay**. Activity titles change from Inspecting project to Editing
-   files to Running tests; numeric progress moves through 10%, 45%, 65%, and 100%.
-   A repeated Running tests title adds no extra step. Point out that the task
-   stays running at 100% and after clear. Only `OSC 133;D;0` authorizes success.
-   With title publication off, only fixed labels/progress appear in Shell. With
-   publication on but steps off, titles remain metadata. With both enabled, the bridge sends completed/executing
-   steps through `AppTaskContent.CreateSequenceOfSteps`.
-3. Open the demo's taskbar task flyout. On supported Windows, inspect the genuine
-   Completed card. Click **Show details** to activate the existing demo window
-   and inspect the matching persisted task.
-4. Select **failure**, then **Run / replay**. Red progress is still running;
-   `OSC 133;D;1` produces Error. The earlier success card remains available
-   alongside the failure card.
-5. Optionally show **indeterminate** or **warning**, or cancel a running scenario.
-   Explain that progress styling is not a request for input.
-6. **Reset view** clears only the host's current logs and local preview.
-   **Clear demo tasks** explicitly removes this provider's demo tasks, including
-   tasks from previous runs. Do not clear cards you still want to present.
+The WinUI host explicitly passes `--synthetic-shell-markers` because it runs
+the CLI directly without a shell. **Do not pass that flag in Route B.**
+OSC 133 has no nesting/producer IDs; a misbehaving child can emit ambiguous
+duplicate starts/finishes. Idempotence helps with duplicates but does not authenticate
+an outcome. One agreed lifecycle producer is required.
 
-The agent pauses about 1.6 seconds per stage. `--fast` is available for automated
-CLI tests, not used by the presentation host.
+## How the light-up works
 
-## Scenarios and mapping
+```text
+CLI: optional OSC 0/2 title + optional OSC 9;4 progress + narrative + exit
+Shell: OSC 133 C/D around foreground execution
+    -> host's existing parser and lifecycle
+    -> packaged owner/broker calls AppTaskInfo
+    -> Windows Shell renders its separate task surface
 
-The table describes the standalone WinUI host's explicit synthetic-marker fixture.
-In normal agent mode the real shell owns completion; `unknown` exits 0 and cannot
-force that shell to omit its exit code. `crash` exits 7, which an integrated shell
-can report normally.
+Show details -> opaque host-owned route -> matching live tab/pane or demo window
+```
 
-| Scenario | Meaning | Local final state | Shell final state |
-|---|---|---|---|
-| `success` | 100%, clear, then explicit exit 0 | Completed | Completed |
-| `failure` | Error-colored progress, then explicit exit 1 | Error | Error |
-| `indeterminate` | Indeterminate interval, then explicit exit 0 | Completed | Completed |
-| `warning` | Warning-colored progress; no input request | Completed | Completed |
-| `unknown` | Finish marker with no exit code, process exits 0 | Unknown | Error, with unknown-outcome explanation |
-| `crash` | Simulated abrupt nonzero exit 7 without finish marker | Error | Error |
-| Cancel button | Host kills/reaps its child; work is not resumable | Cancelled | Error, with cancellation explanation |
-| `title-only` | Live generic titles; no progress; process eventually exits 0 | Completed only at process outcome | Completed |
-| `conversation` | Simulated answer, bounded waiting with process still open; no progress | Session active until exit, then Completed | Running until outcome, then Completed |
+Titles are sanitized/bounded **display metadata**, not authenticated application
+identity, commands, step completions or agent turns. Routes are independent of
+titles. Native click-back is implemented: a live route selects its tab/pane/window;
+invalid or stale routes show an explanation rather than rerunning a saved command.
+**Live native click-back verification is still unconfirmed.**
 
-The `crash` scenario simulates an unexpected process exit; it is not a native
-crash or crash-dump test. Unknown and Cancelled use Shell **Error** as an explicit
-demo policy because AppTaskState has no equivalent states. They are not falsely
-represented as successful, Paused, or NeedsAttention.
-
-| Wire sequence (BEL or ESC-backslash terminated) | Interpretation |
+| Input | What may be claimed |
 |---|---|
-| `OSC 0;<title>` / `OSC 2;<title>` | Standard title metadata. Publication requires a separate privacy opt-in; optional legacy step inference is not part of the generic path. |
-| `OSC 133;A` | Prompt begins. |
-| `OSC 133;B` | Command input begins; **not execution**. |
-| `OSC 133;C` | Execution/output begins; transition to Running. |
-| `OSC 133;D;0` | Completed. |
-| `OSC 133;D;<nonzero>` | Error. |
-| `OSC 133;D` | Ended, but outcome is Unknown. |
-| `OSC 9;4;0[;percent]` | Clear/hide progress; **not completion**. |
-| `OSC 9;4;1;<percent>` | Numeric progress 0..100; **100 is not completion**. |
-| `OSC 9;4;2;<percent>` | Error-colored progress; **not terminal failure**. |
-| `OSC 9;4;3[;percent]` | Indeterminate progress. |
-| `OSC 9;4;4;<percent>` | Warning-colored progress; **not Paused or NeedsAttention**. |
+| Open foreground session, no progress | **Session active**, not necessarily working or waiting for required input |
+| OSC 9;4 numeric/indeterminate | **Reported application progress**, not inferred work |
+| Clear or 100% | Still open until an authoritative outcome |
+| Error/warning progress styling | Not terminal failure, Paused, or NeedsAttention by itself |
+| Shell C/D | Foreground command lifetime, **not turns inside an interactive agent** |
 
-Only the explicitly requested **synthetic test-fixture mode** emits shell lifecycle
-markers around one invocation; normal CLI mode leaves OSC 133 to the shell.
-No custom OSC protocol or ConEmu-specific
-`OSC 9;3` title extension is required. Numeric states require a percentage in this
-demo's supported subset. Other OSC/shell-integration extensions are ignored or
-reported as malformed rather than inferred.
+The sample native PowerShell integration maps its overall command/pipeline
+success to D;0 or D;1, not an exact arbitrary native exit code. Other shell
+integrations, nested shells and concurrent background jobs require validation.
+`AppTaskContent` has no documented numeric-percent property: percentage is text
+in the card; optional richer factories are described in the design note.
 
-There is no documented numeric-percent property on `AppTaskInfo`.
-Running content uses `AppTaskContent.CreateSequenceOfSteps` with a textual progress
-label and, when opted in, completed activities. Terminal content uses
-`CreateTextSummaryResult`: success completes the last opt-in activity; failure,
-unknown outcome, and cancellation retain it as **unfinished**, never completed.
+## What you get without changing an agent
 
-### Activity convention
+Three real interactive agent CLIs—Claude Code, GitHub Copilot CLI and Codex—emitted
+OSC 0 titles in calibrated, short arithmetic probes. Those already available
+titles can provide opt-in task-card metadata without agent-specific code or a
+brand registry. Shell-owned lifetime provides Session active and eventual process
+completion; the host provides a route back to the session.
 
-The reusable lifecycle and host both default title publication and step inference
-**off**. The host exposes separate opt-ins; generic title-only/conversation fixtures
-cannot enable step inference. Only the legacy sequential fixtures promise the
-title-to-step convention below. The native generic bridge never uses that heuristic.
+No agent OSC 9;4 or OSC 133 appeared in those short samples. That is **not universal
+absence** across versions, modes, long jobs or approval states. You get progress
+only if the program reports it; an interactive process does not complete merely
+because it printed an answer. We do not parse spinners or infer per-turn
+work/approval/completion. See [versions, modes and calibrated evidence](docs/generic-agent-demo.md#real-agent-evidence-narrow-observations-not-a-support-registry).
 
-With an observed foreground process open and no application progress, labels say
-**Session active**, not Working. Working is explicitly qualified by OSC 9;4
-application progress. Clear returns to Session active; an answer/title change is
-not a turn-completion or needs-attention signal. OSC 133 describes the foreground
-process, not the turns of an interactive agent.
+**Privacy:** titles can contain complete prompts, private paths or secrets.
+Sanitization is not redaction. Mirroring publishes to a Shell-owned persistent
+surface outside Terminal, so consent is separate from enabling task cards.
 
-Only titles received after `OSC 133;C` can be activity transitions; pre-command
-branding/cwd titles remain metadata. Consecutive identical titles and empty titles
-do not complete a step. A later return to an earlier title is a new activity, not
-global deduplication. Progress is invocation-level, so title changes preserve its
-latest value; it is not assumed to be a per-step percentage. The producer promises
-that each different nonempty in-command title means its previous activity finished.
+## Verification, limits and what comes next
 
-History is immutable per snapshot and retains the latest eight completed activities,
-with an explicit omitted count. Activity strings are sanitized/capped at 120
-characters. Reset/replay creates a fresh lifecycle with no stale history, title,
-progress, or inferred success. Ordinary stdout never becomes steps or summaries.
+- **OSC repo:** 216 assertions pass, including byte-split parsing, normal/fixture
+  modes, lifecycle ambiguity, bounded waiting/history, privacy defaults and
+  presenter validation. Packaged Debug x64 builds; presenter execution was checked
+  for marker-free titles, failure exit propagation and caller-directory restoration.
+- **Observed standalone:** real simple Completed/Failed Shell cards and return to
+  the demo window; legacy opt-in rich API readback at 65% and final all-three
+  completed activities. API readback is not proof of rich Shell flyout layout.
+- **Observed native:** a screenshot of an ordinary CLI success producing a genuine
+  Shell Completed card. Latest title-aware rendering, failure and Show details
+  click-back remain unconfirmed. Native focused tests/build and detailed gaps are
+  tracked in the [native guide][native-guide].
+- **Still unverified here:** new generic host privacy controls/rendering, pane
+  moves/stale routes/dismissal/restart behavior, unsupported systems, alternate
+  accessibility/themes/DPI, ARM64 and Release. No manual checklist is represented
+  as passed solely because code builds.
 
-## Structure and reuse
+Next: verify live title-aware cards, success/failure and click-back across pane
+moves/stale routes; harden production settings, localization and persistence;
+discuss generic standards or negotiated explicit richer metadata rather than
+per-agent heuristics. The richer JSON extension is **proposed, not implemented**.
+Any upstream discussion/contribution must respect the upstream project's design
+and AI-contribution policies. Publishing this fork demo is not upstream approval.
 
-| Project | Responsibility |
+## Code and deeper documentation
+
+| Location | Responsibility |
 |---|---|
-| `OscTasks.Agent` | Independent C# console simulation; normally emits narrative/title/progress and exits. Synthetic shell markers require an explicit fixture flag. No Shell APIs. |
-| `OscTasks.Core` | Platform-neutral `OscParser`, immutable snapshots/`TaskLifecycle`, and `AgentProcess` byte-stream transport. |
-| `OscTasks.Shell` | Packaged WinRT boundary: support probe, real Create/Update/FindAll/Remove, ownership and activation-route filtering. No WinUI dependency. |
-| `OscTasks.Host` | WinUI presentation and orchestration; fixed bundled agent, cancellation, throttled UI/API updates, single-instance protocol activation. |
-| `OscTasks.Tests` | Dependency-free executable test harness using actual agent subprocesses; no Shell task creation. |
+| `OscTasks.Agent` | Independent deterministic CLI |
+| `OscTasks.Core` | Platform-neutral incremental parser, lifecycle and process transport |
+| `OscTasks.Shell` | Real packaged AppTaskInfo adapter; no WinUI dependency |
+| `OscTasks.Host` | Packaged WinUI presentation and orchestration |
+| `OscTasks.Tests` | Dependency-free assertion runner and actual subprocess tests |
 
-For a later `microsoft/intelligent-terminal` integration, reuse the parser,
-lifecycle, and Shell adapter rather than this UI. Feed bytes from that host's
-transport and maintain one lifecycle per invocation. A real terminal integration
-would need its own session/command correlation, ConPTY pass-through verification,
-trust boundaries, and lifecycle policy. No fork or integration is included here.
+- [Generic presenter, empirical evidence and native handoff](docs/generic-agent-demo.md)
+- [Standalone technical reference and known gaps](docs/standalone-reference.md)
+- [Rich content / optional metadata design](docs/rich-osc-task-cards.md)
+- [Pinned upstream reconnaissance and later fork status](docs/intelligent-terminal-integration.md)
+- [Custom Terminal fork branch][native-branch] · [Native guide][native-guide] · [Native launcher][native-launcher]
+- First-party references: [AppTaskInfo](https://learn.microsoft.com/en-us/uwp/api/windows.ui.shell.tasks.apptaskinfo?view=winrt-28000),
+  [AppTaskContent](https://learn.microsoft.com/en-us/uwp/api/windows.ui.shell.tasks.apptaskcontent?view=winrt-28000),
+  [AppTaskState](https://learn.microsoft.com/en-us/uwp/api/windows.ui.shell.tasks.apptaskstate?view=winrt-28000),
+  [Terminal progress OSC](https://learn.microsoft.com/en-us/windows/terminal/tutorials/progress-bar-sequences),
+  [shell integration](https://learn.microsoft.com/en-us/windows/terminal/tutorials/shell-integration).
 
-## Safety, persistence, and limits
-
-- UTF-8 decoding and OSC parsing are incremental across arbitrary reads, including
-  split multibyte characters and terminators. Malformed UTF-8 is replaced and
-  reported. Oversized/malformed OSC payloads are discarded until a terminator;
-  EOF reports truncation. A valid literal U+FFFD is not mistaken for a decode error.
-- OSC payloads are bounded at 4096 characters. Text emission is chunked; the host
-  retains at most 32768 output characters and 120 decoded-event entries, with
-  visible trimming notices. UI/Shell updates are throttled to four per second
-  during a run, plus an immediate final refresh. Intermediate states may coalesce.
-- This is one command per run, not a multi-command shell. Once a terminal outcome
-  is accepted, later markers/disconnects cannot produce another terminal transition.
-  A missing finish marker plus process exit 0 is **Unknown**, not success.
-- Output is data, never input. The host uses `ProcessStartInfo.ArgumentList` with
-  a fixed bundled executable, no shell, and no output-triggered command/URI execution.
-  Stderr is drained separately and is not interpreted as OSC.
-- Host-generated scenario/state labels go to Shell; sanitized application titles
-  do so only after explicit opt-in. Titles may contain private prompts or paths;
-  sanitization is not anonymization. Stdout narrative, stderr, and command lines
-  are not independently published. Legacy title-to-step inference requires another
-  opt-in and is excluded from generic fixtures. This is privacy minimization,
-  not a security boundary against a malicious child falsifying titles/markers.
-- Cancellation and normal window close are wired to stop/reap the owned child
-  process tree. Hard termination of the host itself is not covered by a Job Object;
-  recovery from host/OS crashes is outside this demo.
-- Tasks persist across app sessions/reboots. Startup reports previous demo tasks;
-  it does not pretend stale Running tasks are live, resume them, or auto-delete them.
-  Replay deliberately creates a new task.
-- Before updating an existing task, the adapter checks `FindAll` and `HiddenByUser`.
-  Hidden/removed tasks are not recreated in that run. Cleanup uses current-app
-  enumeration plus the demo group title and safe route, never another provider's data.
-- The only accepted activation route is `osctasksdemo://task/<GUID>` with no query,
-  fragment, credentials, or port. It opens/inspects the demo task; it never executes
-  commands. A Shell card can reactivate the existing app or start the packaged app.
-- Missing runtime types or `IsSupported() == false` produce a prominent
-  **Unsupported / local preview only** banner. API failures show the operation,
-  exception, HRESULT, and message. They stop publishing until an explicit new run;
-  no fake card substitutes for success.
-- An unexpected null `FindAll` is reported as unavailable enumeration, **not**
-  silently treated as an empty collection. Startup can still attempt Create on
-  an explicit run. Null enumeration while updating blocks updates because hidden
-  state cannot be checked. Clear/activation also report null explicitly.
-- Null content/Create results are failures. A successful API result includes
-  task ID, state readback, subtitle, and deep link. **API success alone does not
-  prove Shell visibility**; inspect the actual Shell separately.
-
-## Verification and known gaps
-
-Observed on **2026-09-14**, Windows **26H2 build 26340.9233**, Debug x64:
-
-- Packaged host built and launched with WinApp 0.6.0. Registered manifest contained
-  the App Task provider extension, protocol registration, and bundled agent.
-- `AppTaskInfo.IsSupported()` returned true. Real Create/Update worked; completed
-  state and a genuine task ID were read back.
-- User-provided screenshots confirmed **real Completed and Failed Shell cards**
-  side by side. Show details returned to the existing host, which displayed the
-  matching persisted task ID. Replay produced a distinct task.
-- `FindAll()` initially returned null before any demo tasks were created.
-  Subsequent enumeration found created tasks. The adapter retains explicit null
-  diagnostics because the documented return contract does not establish that
-  null means empty.
-- `.\Demo.ps1 -Test` passed **216 assertions**, including UTF-8/BEL/ST split points,
-  malformed/unknown/oversized/truncated sequences, strict progress parsing,
-  ambiguity/idempotence, all six real subprocess scenarios, cancellation, and
-  stream-consumer failure propagation/cleanup. Rich-activity tests cover publication
-  and history opt-out, pre-command ordering, repeated/blank titles, bounded immutable
-  history, replay/reset initialization, failure/unknown/cancel semantics, and real
-  CLI activity + 65% snapshots with ordered completed activities. All six normal
-  agent scenarios are verified to emit no OSC 133 markers and compose with
-  harness-supplied shell lifecycle/real exit codes. Duplicate execution markers
-  cannot reset an active invocation, and unknown CLI options are rejected.
-  Generic fixtures add no-progress/session waiting/title-as-metadata checks,
-  configurable bounded pacing, both lifecycle modes, and presenter argument
-  validation without UI launch. Actual presenter execution was checked for
-  agent-only publishing, no-marker/no-progress titles, exit propagation and cwd restoration.
-
-The original simple Completed/Failed cards above were visually observed.
-Subsequent direct WinUI inspection enabled the opt-in checkbox and ran success:
-at 65%, the real API panel reported Running with subtitle `Running tests -- 65%`
-and Inspecting project / Editing files each completed exactly once despite a
-repeated Running tests title. After explicit `OSC 133;D;0`, API readback reported
-Completed with all three activities. The local activity history matched.
-This verifies the opt-in host interaction and reported API invocation/readback,
-**not the actual rich Shell flyout layout**, which has not been observed.
-
-**Not visually verified:** the new default-off publication control and generic
-title-only/conversation host scenarios, opt-in failure, indeterminate/warning/unknown/crash scenarios in the
-host, Cancel/close-time process cleanup, Reset view, Clear demo tasks,
-HiddenByUser behavior, cold-start deep linking, restart/reboot recovery, unsupported
-Windows behavior, alternate DPI/themes/accessibility modes, ARM64, and Release.
-Core subprocess tests cover those protocol outcomes and cancellation, but are not
-a substitute for UI or Shell verification. No displayed tasks were removed during
-verification. The limited later opt-in inspection did not include Shell flyout actions.
-
-The rich-activity build was registered/launched through `.\Demo.ps1` on explicit
-request; the process was responsive and deployed Host/Core/Shell binaries matched
-the build. No scenarios or Shell-card interactions were automated as part of that
-launch. Launch verification does not verify the new rich presentation.
-The final diagnostic-only fix removes a duplicate history block from the API
-panel's terminal result text; it does not change Shell content or lifecycle.
-It was built without redeploying the running app.
-The subsequent default-agent/synthetic-fixture separation was also built/tested
-without redeployment; the earlier UI observations predate that CLI-mode change.
-The generic presenter/privacy/session wording changes were likewise built/tested
-without redeployment. Native title-aware verification is tracked separately in
-the [generic demo note](docs/generic-agent-demo.md).
-
-## First-party references
-
-- [AppTaskInfo: support rollout, packaging, persistence, provider manifest](https://learn.microsoft.com/en-us/uwp/api/windows.ui.shell.tasks.apptaskinfo?view=winrt-28000)
-- [AppTaskContent factories](https://learn.microsoft.com/en-us/uwp/api/windows.ui.shell.tasks.apptaskcontent?view=winrt-28000)
-- [AppTaskState meanings](https://learn.microsoft.com/en-us/uwp/api/windows.ui.shell.tasks.apptaskstate?view=winrt-28000)
-- [Windows Terminal progress sequences](https://learn.microsoft.com/en-us/windows/terminal/tutorials/progress-bar-sequences)
-- [Windows Terminal shell integration](https://learn.microsoft.com/en-us/windows/terminal/tutorials/shell-integration)
-
-These APIs are experimental and gradually rolled out beginning May 2026.
-Expected compiler warning **CS8305** is intentionally visible; SDK/runtime
-behavior and Shell presentation can change.
+[native-branch]: https://github.com/shanselman/terminal/tree/demo/osc-app-tasks
+[native-guide]: https://github.com/shanselman/terminal/blob/demo/osc-app-tasks/doc/shell-task-demo.md
+[native-launcher]: https://github.com/shanselman/terminal/blob/demo/osc-app-tasks/samples/ShellTaskDemo/Start-Demo.ps1
+[native-building]: https://github.com/shanselman/terminal/blob/demo/osc-app-tasks/doc/building.md
