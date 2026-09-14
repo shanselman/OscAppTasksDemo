@@ -88,7 +88,17 @@ ESC ] 133;D;0 ST
 necessarily `NeedsAttention`, and error-colored progress is not terminal failure.
 A missing exit code leaves the outcome unknown. OSC 133;B denotes command input,
 not execution. Real shells normally supply lifecycle markers; this demo CLI
-emits synthetic markers around one invocation.
+leaves them to the shell **by default**. The standalone WinUI process-output host
+explicitly requests `--synthetic-shell-markers` as a test fixture because it runs
+no shell. The wire examples above illustrate the combined stream, not a contract
+for coding agents to emit shell-owned OSC 133 themselves.
+
+For custom-terminal tests, run the CLI normally under an integrated shell. Mixing
+synthetic markers with that shell's own markers creates ambiguous nesting: OSC 133
+has no producer/task ID. Duplicate-transition guards are useful against repeated
+or misbehaving output, but cannot authenticate a finish event or resolve ownership.
+Meaningful activity titles, progress and a real exit code are the agent pattern;
+shell lifecycle comes from the shell. See [CLI modes](../README.md#normal-coding-agent-mode-vs-direct-host-fixture).
 
 Ordinary output remains narrative. Do not automatically convert log lines into
 steps, questions, buttons, or results.

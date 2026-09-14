@@ -58,7 +58,38 @@ dotnet run --project .\OscTasks.Agent -- indeterminate
 
 That terminal may render OSC title/progress itself, but these standalone commands
 do **not** create Shell tasks: the CLI has no Windows/WinRT dependencies. Only the
-packaged demo host bridges the captured stream to `AppTaskInfo`.
+packaged demo host in this repository bridges the captured stream to `AppTaskInfo`.
+A future custom terminal can supply that bridge instead.
+
+### Normal coding-agent mode vs direct-host fixture
+
+**The default CLI does not emit OSC 133 shell lifecycle markers.** It behaves like
+a coding agent: narrative on stdout, meaningful OSC 2 activity titles, OSC 9;4
+progress, and a real process exit code. OSC 9;4 carries no textual activity field;
+titles and progress are separate signals.
+
+Run the same ordinary command above inside the custom Terminal. Its surrounding
+shell must have shell integration enabled to supply `133;C` before execution and
+`133;D;<exitcode>` after exit. The terminal bridge combines those with the agent's
+activity/progress. Without that lifecycle source, titles, 100%, or clear alone
+cannot authorize task completion. Native-terminal integration is still planned,
+not implemented by this repository.
+
+The standalone WinUI host launches a child directly, without a shell. It therefore
+explicitly passes **`--synthetic-shell-markers`**, a visibly labeled **test-fixture
+option**, to exercise its parser/lifecycle pipeline. For direct-process harnesses:
+
+```powershell
+dotnet run --project .\OscTasks.Agent -- success --synthetic-shell-markers
+dotnet run --project .\OscTasks.Agent -- --help
+```
+
+Do not pass that fixture flag when testing under a shell that already emits
+lifecycle markers. OSC 133 has no task/nesting IDs: a shell and a misbehaving child
+can emit ambiguous duplicate starts/finishes. Idempotent handling helps with
+repeated transitions but cannot prove which producer's finish is authoritative.
+Use one agreed lifecycle producer; do not recommend shell markers as part of the
+coding-agent output pattern. Arbitrary child output remains untrusted.
 
 ## Requirements
 
@@ -120,6 +151,11 @@ CLI tests, not used by the presentation host.
 
 ## Scenarios and mapping
 
+The table describes the standalone WinUI host's explicit synthetic-marker fixture.
+In normal agent mode the real shell owns completion; `unknown` exits 0 and cannot
+force that shell to omit its exit code. `crash` exits 7, which an integrated shell
+can report normally.
+
 | Scenario | Meaning | Local final state | Shell final state |
 |---|---|---|---|
 | `success` | 100%, clear, then explicit exit 0 | Completed | Completed |
@@ -150,8 +186,9 @@ represented as successful, Paused, or NeedsAttention.
 | `OSC 9;4;3[;percent]` | Indeterminate progress. |
 | `OSC 9;4;4;<percent>` | Warning-colored progress; **not Paused or NeedsAttention**. |
 
-The fake CLI emits **synthetic shell lifecycle markers** around one invocation;
-a real shell normally emits OSC 133. No custom OSC protocol or ConEmu-specific
+Only the explicitly requested **synthetic test-fixture mode** emits shell lifecycle
+markers around one invocation; normal CLI mode leaves OSC 133 to the shell.
+No custom OSC protocol or ConEmu-specific
 `OSC 9;3` title extension is required. Numeric states require a percentage in this
 demo's supported subset. Other OSC/shell-integration extensions are ignored or
 reported as malformed rather than inferred.
@@ -185,7 +222,7 @@ progress, or inferred success. Ordinary stdout never becomes steps or summaries.
 
 | Project | Responsibility |
 |---|---|
-| `OscTasks.Agent` | Independent C# console simulation; emits narrative and OSC bytes, knows nothing about Shell APIs. |
+| `OscTasks.Agent` | Independent C# console simulation; normally emits narrative/title/progress and exits. Synthetic shell markers require an explicit fixture flag. No Shell APIs. |
 | `OscTasks.Core` | Platform-neutral `OscParser`, immutable snapshots/`TaskLifecycle`, and `AgentProcess` byte-stream transport. |
 | `OscTasks.Shell` | Packaged WinRT boundary: support probe, real Create/Update/FindAll/Remove, ownership and activation-route filtering. No WinUI dependency. |
 | `OscTasks.Host` | WinUI presentation and orchestration; fixed bundled agent, cancellation, throttled UI/API updates, single-instance protocol activation. |
@@ -257,30 +294,43 @@ Observed on **2026-09-14**, Windows **26H2 build 26340.9233**, Debug x64:
   Subsequent enumeration found created tasks. The adapter retains explicit null
   diagnostics because the documented return contract does not establish that
   null means empty.
-- `.\Demo.ps1 -Test` passed **150 assertions**, including UTF-8/BEL/ST split points,
+- `.\Demo.ps1 -Test` passed **176 assertions**, including UTF-8/BEL/ST split points,
   malformed/unknown/oversized/truncated sequences, strict progress parsing,
   ambiguity/idempotence, all six real subprocess scenarios, cancellation, and
   stream-consumer failure propagation/cleanup. Rich-activity tests cover publication
   and history opt-out, pre-command ordering, repeated/blank titles, bounded immutable
   history, replay/reset initialization, failure/unknown/cancel semantics, and real
-  CLI activity + 65% snapshots with ordered completed activities.
+  CLI activity + 65% snapshots with ordered completed activities. All six normal
+  agent scenarios are verified to emit no OSC 133 markers and compose with
+  harness-supplied shell lifecycle/real exit codes. Duplicate execution markers
+  cannot reset an active invocation, and unknown CLI options are rejected.
 
-The original simple Completed/Failed cards above were visually observed. The new
-rich title/step content and opt-in control have been built and tested at the
-core/process level, but **have not been visually verified in WinUI or the Shell**.
+The original simple Completed/Failed cards above were visually observed.
+Subsequent direct WinUI inspection enabled the opt-in checkbox and ran success:
+at 65%, the real API panel reported Running with subtitle `Running tests -- 65%`
+and Inspecting project / Editing files each completed exactly once despite a
+repeated Running tests title. After explicit `OSC 133;D;0`, API readback reported
+Completed with all three activities. The local activity history matched.
+This verifies the opt-in host interaction and reported API invocation/readback,
+**not the actual rich Shell flyout layout**, which has not been observed.
 
-**Not visually verified:** indeterminate/warning/unknown/crash scenarios in the
+**Not visually verified:** opt-in failure, indeterminate/warning/unknown/crash scenarios in the
 host, Cancel/close-time process cleanup, Reset view, Clear demo tasks,
 HiddenByUser behavior, cold-start deep linking, restart/reboot recovery, unsupported
 Windows behavior, alternate DPI/themes/accessibility modes, ARM64, and Release.
 Core subprocess tests cover those protocol outcomes and cancellation, but are not
 a substitute for UI or Shell verification. No displayed tasks were removed during
-verification. UI automation was paused at the user's request.
+verification. The limited later opt-in inspection did not include Shell flyout actions.
 
 The rich-activity build was registered/launched through `.\Demo.ps1` on explicit
 request; the process was responsive and deployed Host/Core/Shell binaries matched
 the build. No scenarios or Shell-card interactions were automated as part of that
 launch. Launch verification does not verify the new rich presentation.
+The final diagnostic-only fix removes a duplicate history block from the API
+panel's terminal result text; it does not change Shell content or lifecycle.
+It was built without redeploying the running app.
+The subsequent default-agent/synthetic-fixture separation was also built/tested
+without redeployment; the earlier UI observations predate that CLI-mode change.
 
 ## First-party references
 

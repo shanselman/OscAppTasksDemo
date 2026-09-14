@@ -140,12 +140,12 @@ internal sealed class WindowsTaskBackend
             }
             _task = current;
         }
-        // Shell labels are host-owned: no command lines, OSC titles or arbitrary output leave the host.
-        string subtitle = $"{scenario} / {snapshot.State}";
-        string safeLabel = snapshot.Label;
+        // Activity publication is an explicit lifecycle opt-in, enabled only for the bundled demo agent.
+        string subtitle = snapshot.IsTerminal ? $"{scenario} / {snapshot.State}" : snapshot.ActivityStatus;
+        string safeLabel = snapshot.IsTerminal ? snapshot.Summary : snapshot.ExecutingLabel;
         AppTaskContent content = snapshot.IsTerminal
             ? AppTaskContent.CreateTextSummaryResult(safeLabel)
-            : AppTaskContent.CreateSequenceOfSteps([], safeLabel);
+            : AppTaskContent.CreateSequenceOfSteps(snapshot.CompletedActivities.ToArray(), safeLabel);
         if (content is null)
             throw new NotSupportedException("AppTaskContent factory returned null. No task update was submitted.");
         AppTaskState state = snapshot.State switch
@@ -165,7 +165,9 @@ internal sealed class WindowsTaskBackend
         return $"{(created ? "Create + Update" : "Update")} succeeded\n" +
             $"Id: {_task.Id}\nState read back: {_task.State}\nHiddenByUser: {_task.HiddenByUser}\n" +
             $"Subtitle: {_task.Subtitle}\nDeepLink: {_task.DeepLink}\n" +
-            $"Content: {safeLabel}\n\nShell visibility must be observed separately.";
+            $"Content: {safeLabel}" +
+            (snapshot.IsTerminal ? "" : $"\n{snapshot.StepHistory}") +
+            "\n\nShell visibility must be observed separately.";
     }
 
     public string ClearOwnedTasks()

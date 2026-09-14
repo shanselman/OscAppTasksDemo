@@ -52,7 +52,7 @@ public sealed partial class MainPage : Page
         {
             string agent = Path.Combine(AppContext.BaseDirectory, "Agent", "OscTasks.Agent.exe");
             if (!File.Exists(agent)) throw new FileNotFoundException("Packaged agent missing. Run .\\Demo.ps1 to publish it before building.", agent);
-            var result = await AgentProcess.RunAsync(agent, new[] { _scenario }, Receive,
+            var result = await AgentProcess.RunAsync(agent, new[] { _scenario, "--synthetic-shell-markers" }, Receive,
                 message => Receive(new(EventKind.Text, $"[stderr] {message}\n")), _cancellation.Token);
             lock (_gate)
             {
@@ -122,7 +122,8 @@ public sealed partial class MainPage : Page
             _lastPublished = snapshot;
         }
         LocalState.Text = $"{snapshot.State}\n{snapshot.Label}" +
-            (snapshot.Title.Length > 0 ? $"\nLocal OSC title: {snapshot.Title}" : "");
+            (snapshot.CurrentActivity.Length > 0 ? $"\nActivity: {snapshot.ActivityStatus}" : "");
+        StepOutput.Text = snapshot.StepHistory;
         LocalProgress.IsIndeterminate = snapshot.IsIndeterminate;
         LocalProgress.Value = snapshot.Percent ?? 0;
         ShowShellStatus();
@@ -144,6 +145,7 @@ public sealed partial class MainPage : Page
     {
         RunButton.IsEnabled = !running;
         Scenario.IsEnabled = !running;
+        TitleSteps.IsEnabled = !running;
         CancelButton.IsEnabled = running;
         ResetButton.IsEnabled = !running;
         ClearButton.IsEnabled = !running && _shell.Status.IsSupported;
@@ -158,7 +160,7 @@ public sealed partial class MainPage : Page
         {
             _output.Clear();
             _events.Clear();
-            _lifecycle = new();
+            _lifecycle = new(useTitleAsActivity: true, enableTitleStepHistory: TitleSteps.IsChecked == true);
             _lastPublished = null;
             _droppedEvents = 0;
             _trimmedOutput = false;

@@ -15,7 +15,8 @@
             <TextBlock Text="A real byte stream. Standard OSC sequences. A packaged Windows AppTaskInfo provider."
                        TextWrapping="Wrap"/>
         </StackPanel>
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+        <StackPanel Grid.Row="1" Spacing="4">
+          <StackPanel Orientation="Horizontal" Spacing="8">
             <ComboBox x:Name="Scenario" SelectedIndex="0" MinWidth="180" AutomationProperties.AutomationId="Scenario"
                       AutomationProperties.Name="Demo scenario">
                 <x:String>success</x:String>
@@ -34,6 +35,12 @@
             <Button x:Name="ClearButton" Content="Clear demo tasks" Click="Clear_Click"
                     AutomationProperties.AutomationId="ClearDemoTasks"
                     ToolTipService.ToolTip="Remove persisted tasks belonging to this demo provider only"/>
+          </StackPanel>
+          <CheckBox x:Name="TitleSteps" Content="OPT-IN: title changes complete prior activity (demo convention, not OSC semantics)"
+                    IsChecked="False" AutomationProperties.AutomationId="TitleStepHistory"
+                    ToolTipService.ToolTip="Applies on the next run. Off by default; enable only for a producer that explicitly promises sequential activity titles."/>
+          <TextBlock Text="Bundled fake-agent titles are published as activity; ordinary stdout remains narrative."
+                     TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
         </StackPanel>
         <InfoBar x:Name="SupportBanner" Grid.Row="2" IsOpen="True" IsClosable="False"
                  Title="Checking Shell support" Severity="Informational"/>
@@ -48,7 +55,7 @@
                     <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <TextBlock Text="1 / Process output" Style="{ThemeResource SubtitleTextBlockStyle}"/>
-                <TextBlock Grid.Row="1" Text="Redirected stdout, not a terminal emulator" TextWrapping="Wrap"
+                <TextBlock Grid.Row="1" Text="Redirected stdout, not a terminal emulator; explicit synthetic shell fixture" TextWrapping="Wrap"
                            Style="{ThemeResource CaptionTextBlockStyle}"/>
                 <TextBox x:Name="TerminalOutput" Grid.Row="2" IsReadOnly="True" AcceptsReturn="True"
                          FontFamily="Cascadia Mono, Consolas" TextWrapping="Wrap"
@@ -71,6 +78,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <TextBlock Text="3 / Real Shell API" Style="{ThemeResource SubtitleTextBlockStyle}"/>
                 <TextBlock Grid.Row="1" Text="Actual invocation results, not a Shell card" TextWrapping="Wrap"
@@ -83,6 +91,10 @@
                            AutomationProperties.AutomationId="LocalState"/>
                 <ProgressBar x:Name="LocalProgress" Grid.Row="5" Minimum="0" Maximum="100"
                              AutomationProperties.Name="Local progress preview"/>
+                <TextBox x:Name="StepOutput" Grid.Row="6" IsReadOnly="True" AcceptsReturn="True"
+                         Text="Title-to-step history OFF" MaxHeight="120" TextWrapping="Wrap"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         AutomationProperties.AutomationId="ActivityHistory" AutomationProperties.Name="Opt-in activity history"/>
             </Grid>
         </Grid>
         <StackPanel Grid.Row="4" Spacing="4">

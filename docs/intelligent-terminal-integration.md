@@ -54,6 +54,12 @@ research.
 
 ## Recommended first implementation
 
+Use the demo CLI's **default agent mode** as the integration producer: activity
+titles, progress, narrative, and an exit code, with no OSC 133 markers. Launch it
+under an integrated shell so the shell supplies C/D. The separate
+`--synthetic-shell-markers` option is for the direct WinUI test harness only;
+combining it with shell integration would create ambiguous nested lifecycle events.
+
 ```text
 Accepted pane title/progress + explicit OSC 133 transitions
     -> pane/connection-generation adapter
