@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+.vs/
+*.user
+*.pfx
+*.cer
+*.pem
+*.key
+*.log
+.env
+.env.*
+!.env.example
+screenshots/
+artifacts/
+.winapp/

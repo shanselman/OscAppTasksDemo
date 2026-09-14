@@ -1,0 +1,95 @@
+<Page
+    x:Class="OscTasks_Host.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Padding="24" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel Spacing="4">
+            <TextBlock Text="From agent output to a Shell task" Style="{ThemeResource TitleTextBlockStyle}"/>
+            <TextBlock Text="A real byte stream. Standard OSC sequences. A packaged Windows AppTaskInfo provider."
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+            <ComboBox x:Name="Scenario" SelectedIndex="0" MinWidth="180" AutomationProperties.AutomationId="Scenario"
+                      AutomationProperties.Name="Demo scenario">
+                <x:String>success</x:String>
+                <x:String>failure</x:String>
+                <x:String>indeterminate</x:String>
+                <x:String>warning</x:String>
+                <x:String>unknown</x:String>
+                <x:String>crash</x:String>
+            </ComboBox>
+            <Button x:Name="RunButton" Content="Run / replay" Click="Run_Click"
+                    Style="{ThemeResource AccentButtonStyle}" AutomationProperties.AutomationId="RunDemo"/>
+            <Button x:Name="CancelButton" Content="Cancel" IsEnabled="False" Click="Cancel_Click"
+                    AutomationProperties.AutomationId="CancelDemo"/>
+            <Button x:Name="ResetButton" Content="Reset view" Click="Reset_Click"
+                    AutomationProperties.AutomationId="ResetView"/>
+            <Button x:Name="ClearButton" Content="Clear demo tasks" Click="Clear_Click"
+                    AutomationProperties.AutomationId="ClearDemoTasks"
+                    ToolTipService.ToolTip="Remove persisted tasks belonging to this demo provider only"/>
+        </StackPanel>
+        <InfoBar x:Name="SupportBanner" Grid.Row="2" IsOpen="True" IsClosable="False"
+                 Title="Checking Shell support" Severity="Informational"/>
+        <Grid Grid.Row="3" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.15*"/>
+                <ColumnDefinition Width="0.9*"/>
+                <ColumnDefinition Width="360"/>
+            </Grid.ColumnDefinitions>
+            <Grid RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="1 / Process output" Style="{ThemeResource SubtitleTextBlockStyle}"/>
+                <TextBlock Grid.Row="1" Text="Redirected stdout, not a terminal emulator" TextWrapping="Wrap"
+                           Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="TerminalOutput" Grid.Row="2" IsReadOnly="True" AcceptsReturn="True"
+                         FontFamily="Cascadia Mono, Consolas" TextWrapping="Wrap"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         AutomationProperties.AutomationId="ProcessOutput" AutomationProperties.Name="Process output"/>
+            </Grid>
+            <Grid Grid.Column="1" RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="2 / Decoded OSC" Style="{ThemeResource SubtitleTextBlockStyle}"/>
+                <TextBlock Grid.Row="1" Text="Incremental UTF-8 decoder / BEL + ST" TextWrapping="Wrap"
+                           Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="EventOutput" Grid.Row="2" IsReadOnly="True" AcceptsReturn="True"
+                         FontFamily="Cascadia Mono, Consolas" TextWrapping="Wrap"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         AutomationProperties.AutomationId="DecodedEvents" AutomationProperties.Name="Decoded OSC events"/>
+            </Grid>
+            <Grid Grid.Column="2" RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="3 / Real Shell API" Style="{ThemeResource SubtitleTextBlockStyle}"/>
+                <TextBlock Grid.Row="1" Text="Actual invocation results, not a Shell card" TextWrapping="Wrap"
+                           Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="ApiOutput" Grid.Row="2" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         AutomationProperties.AutomationId="ShellApiResult" AutomationProperties.Name="Real Shell API result"/>
+                <TextBlock Grid.Row="3" Text="LOCAL PREVIEW / not the Windows Shell" Style="{ThemeResource BodyStrongTextBlockStyle}"/>
+                <TextBlock x:Name="LocalState" Grid.Row="4" Text="Waiting" TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="LocalState"/>
+                <ProgressBar x:Name="LocalProgress" Grid.Row="5" Minimum="0" Maximum="100"
+                             AutomationProperties.Name="Local progress preview"/>
+            </Grid>
+        </Grid>
+        <StackPanel Grid.Row="4" Spacing="4">
+            <TextBlock x:Name="SessionLabel" Text="Ready. The fake agent uses no AI service and modifies no user files."
+                       TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
+            <TextBlock Text="100% and clear do not mean completed. Warning does not mean needs-attention. Only explicit outcomes finish a command."
+                       TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
+        </StackPanel>
+    </Grid>
+</Page>

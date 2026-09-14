@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "OscTasks.Host (Package)": {
+      "commandName": "MsixPackage"
+    }
+  }
+}
