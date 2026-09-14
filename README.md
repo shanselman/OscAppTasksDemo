@@ -16,8 +16,10 @@ ConPTY, intercept another application's Windows Terminal output, or run an
 interactive shell. The fake agent makes no AI/network calls and modifies no user
 files. The host does create persistent, real Windows Shell tasks.
 
-For planned richer metadata, see [Rich OSC task cards](docs/rich-osc-task-cards.md):
-compatible title/progress/lifecycle composition and an explicitly proposed optional extension.
+For the implemented compatible activity/step tier and the separately proposed
+structured extension, see [Rich OSC task cards](docs/rich-osc-task-cards.md).
+For commit-pinned upstream attachment points and obstacles, see
+[intelligent-terminal integration findings](docs/intelligent-terminal-integration.md).
 
 ## Quick start
 
@@ -30,6 +32,10 @@ From this repository in PowerShell:
 This publishes the agent, builds the host, registers a development package with
 `winapp`, and launches it with package identity and debug-output capture. The
 command stays attached until the app closes. Choose a scenario, then **Run / replay**.
+The fixed fake agent's OSC 2 titles are published as activity labels. The visible
+**OPT-IN** checkbox is off by default: enable it before running only if you want
+title changes to imply completion of the preceding activity. This is an agreed
+demo convention, not standard OSC semantics.
 
 ```powershell
 .\Demo.ps1 -Test         # Standalone parser/lifecycle/real-subprocess tests
@@ -89,9 +95,14 @@ No global alias changes or uninstallations are needed.
    pane is real captured stdout; the middle pane is decoded control traffic;
    the right pane contains real API return/readback information, **not** a
    painted imitation of the Shell.
-2. Select **success**, click **Run / replay**, and watch the 10%, 45%, 100%, clear,
-   and explicit finish events. Point out that the task stays running at 100%
-   and after clear. Only `OSC 133;D;0` authorizes success.
+2. Select **success**, optionally enable **OPT-IN** title steps, and click
+   **Run / replay**. Activity titles change from Inspecting project to Editing
+   files to Running tests; numeric progress moves through 10%, 45%, 65%, and 100%.
+   A repeated Running tests title adds no extra step. Point out that the task
+   stays running at 100% and after clear. Only `OSC 133;D;0` authorizes success.
+   With the checkbox off, activity/progress still appear, but there is no inferred
+   completed-step history. With it on, the bridge sends actual completed/executing
+   steps through `AppTaskContent.CreateSequenceOfSteps`.
 3. Open the demo's taskbar task flyout. On supported Windows, inspect the genuine
    Completed card. Click **Show details** to activate the existing demo window
    and inspect the matching persisted task.
@@ -126,7 +137,7 @@ represented as successful, Paused, or NeedsAttention.
 
 | Wire sequence (BEL or ESC-backslash terminated) | Interpretation |
 |---|---|
-| `OSC 0;<title>` / `OSC 2;<title>` | Standard title metadata, shown locally only. |
+| `OSC 0;<title>` / `OSC 2;<title>` | Standard title metadata. The fixed demo explicitly treats in-command titles as activity; optional step inference is a separate convention. |
 | `OSC 133;A` | Prompt begins. |
 | `OSC 133;B` | Command input begins; **not execution**. |
 | `OSC 133;C` | Execution/output begins; transition to Running. |
@@ -147,7 +158,28 @@ reported as malformed rather than inferred.
 
 There is no documented numeric-percent property on `AppTaskInfo`.
 Running content uses `AppTaskContent.CreateSequenceOfSteps` with a textual progress
-label; terminal content uses `CreateTextSummaryResult`.
+label and, when opted in, completed activities. Terminal content uses
+`CreateTextSummaryResult`: success completes the last opt-in activity; failure,
+unknown outcome, and cancellation retain it as **unfinished**, never completed.
+
+### Activity convention
+
+The reusable lifecycle defaults both title publication and step inference **off**
+for arbitrary sources. The fixed demo host explicitly enables title-as-activity
+and visibly discloses that these labels go to Shell. The checkbox separately
+enables title-to-step history for the next run and is locked during that run.
+
+Only titles received after `OSC 133;C` can be activity transitions; pre-command
+branding/cwd titles remain metadata. Consecutive identical titles and empty titles
+do not complete a step. A later return to an earlier title is a new activity, not
+global deduplication. Progress is invocation-level, so title changes preserve its
+latest value; it is not assumed to be a per-step percentage. The producer promises
+that each different nonempty in-command title means its previous activity finished.
+
+History is immutable per snapshot and retains the latest eight completed activities,
+with an explicit omitted count. Activity strings are sanitized/capped at 120
+characters. Reset/replay creates a fresh lifecycle with no stale history, title,
+progress, or inferred success. Ordinary stdout never becomes steps or summaries.
 
 ## Structure and reuse
 
@@ -181,9 +213,11 @@ trust boundaries, and lifecycle policy. No fork or integration is included here.
 - Output is data, never input. The host uses `ProcessStartInfo.ArgumentList` with
   a fixed bundled executable, no shell, and no output-triggered command/URI execution.
   Stderr is drained separately and is not interpreted as OSC.
-- Only host-generated scenario/state labels go to Shell. Raw OSC titles, stdout,
-  stderr, and command lines are not published there. This is privacy minimization,
-  not a security boundary against a malicious child falsifying lifecycle markers.
+- Host-generated scenario/state labels and the fixed fake agent's sanitized
+  activity titles go to Shell. Stdout narrative, stderr, and command lines do not.
+  For arbitrary sources, title publication requires a separate explicit lifecycle
+  opt-in; title-to-step inference requires another. This is privacy minimization,
+  not a security boundary against a malicious child falsifying titles/markers.
 - Cancellation and normal window close are wired to stop/reap the owned child
   process tree. Hard termination of the host itself is not covered by a Job Object;
   recovery from host/OS crashes is outside this demo.
@@ -223,10 +257,17 @@ Observed on **2026-09-14**, Windows **26H2 build 26340.9233**, Debug x64:
   Subsequent enumeration found created tasks. The adapter retains explicit null
   diagnostics because the documented return contract does not establish that
   null means empty.
-- `.\Demo.ps1 -Test` passed **116 assertions**, including UTF-8/BEL/ST split points,
+- `.\Demo.ps1 -Test` passed **150 assertions**, including UTF-8/BEL/ST split points,
   malformed/unknown/oversized/truncated sequences, strict progress parsing,
   ambiguity/idempotence, all six real subprocess scenarios, cancellation, and
-  stream-consumer failure propagation/cleanup.
+  stream-consumer failure propagation/cleanup. Rich-activity tests cover publication
+  and history opt-out, pre-command ordering, repeated/blank titles, bounded immutable
+  history, replay/reset initialization, failure/unknown/cancel semantics, and real
+  CLI activity + 65% snapshots with ordered completed activities.
+
+The original simple Completed/Failed cards above were visually observed. The new
+rich title/step content and opt-in control have been built and tested at the
+core/process level, but **have not been visually verified in WinUI or the Shell**.
 
 **Not visually verified:** indeterminate/warning/unknown/crash scenarios in the
 host, Cancel/close-time process cleanup, Reset view, Clear demo tasks,
@@ -236,8 +277,10 @@ Core subprocess tests cover those protocol outcomes and cancellation, but are no
 a substitute for UI or Shell verification. No displayed tasks were removed during
 verification. UI automation was paused at the user's request.
 
-Final non-UI reliability fixes were built/tested without redeploying or interacting
-with the running app. Relaunch with `.\Demo.ps1` to load those changes.
+The rich-activity build was registered/launched through `.\Demo.ps1` on explicit
+request; the process was responsive and deployed Host/Core/Shell binaries matched
+the build. No scenarios or Shell-card interactions were automated as part of that
+launch. Launch verification does not verify the new rich presentation.
 
 ## First-party references
 

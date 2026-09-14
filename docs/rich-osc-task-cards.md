@@ -1,7 +1,8 @@
 # Rich task cards from terminal metadata
 
-**Design note, not an implemented protocol.** Preserve existing OSC compatibility
-first; add richer metadata only through explicit producer/host agreement.
+**Compatible activity/step tier implemented; structured extension still proposed.**
+Preserve existing OSC compatibility first; richer interpretations require explicit
+producer/host agreement. No new OSC protocol is implemented.
 
 ## What exists today
 
@@ -9,11 +10,18 @@ The demo already separates the byte-stream parser, one-invocation lifecycle,
 `AppTaskInfo` adapter, and WinUI presentation. It captures a fixed child process's
 stdout, not a full terminal or another terminal application's output.
 
-It decodes OSC 0/2 titles, OSC 9;4 progress, and OSC 133 lifecycle markers. Titles
-are **local metadata only** today. Shell receives a fixed demo group title,
-host-generated scenario/state labels, an executing progress label with an empty
-completed-step list, and a terminal summary. It does not infer steps from titles
-or narrative, accept structured task events, or support concurrent tasks.
+It decodes OSC 0/2 titles, OSC 9;4 progress, and OSC 133 lifecycle markers. The fixed
+fake agent emits Inspecting project, Editing files, and Running tests as activity
+titles. The host explicitly publishes these sanitized labels plus progress to Shell,
+keeping its fixed group title and safe task route.
+
+A visible, default-off **OPT-IN** checkbox enables a title-to-step convention.
+Running cards use genuine `CreateSequenceOfSteps` content; final summaries preserve
+completed history and label interrupted activities unfinished. Successful lifecycle
+completion can finish the final activity; 100%, clear, and narrative cannot.
+History retains eight completed activities with an omitted count and resets per run.
+The reusable lifecycle defaults title publication and history off for arbitrary
+sources. Structured task events and concurrent tasks are **not** implemented.
 
 ## Compatible tier: title + progress + lifecycle
 
@@ -43,7 +51,8 @@ Executing the checks...
 ESC ] 9;4;1;65 BEL
 ```
 
-**Planned, opt-in interpretation** could produce this card at that point:
+The **implemented, opt-in interpretation** is intended to produce content like this
+at that point (exact Shell rendering of the new rich content remains unverified):
 
 ```text
 Demo agent
@@ -60,6 +69,11 @@ completed. **That convention is not standardized OSC semantics.** A normal title
 could be a working directory, shell name, command, or arbitrary text. Without
 agreement, keep it as title metadata and do not invent step history. Even with
 agreement, a step transition is not completion of the whole task.
+
+In this demo, only titles after `OSC 133;C` count as activities. Empty and consecutive
+repeated titles are ignored as transitions. Progress stays invocation-level across
+activity changes; no per-step percentage is inferred. The concrete CLI says
+**Editing files** rather than **Generating changes**, but the convention is the same.
 
 Later, explicit success might be:
 
@@ -160,7 +174,7 @@ Per-command OSC 133 cannot by itself identify which concurrent logical task ende
 - Result assets require scoped, validated references and lifetime rules; no
   automatic fetch of arbitrary URLs or unrestricted local-file access. Define
   how input replies return to the correct still-live producer.
-- Moving activity titles into Shell is a privacy change from today's demo.
+- Moving activity titles into Shell is a privacy change from the original demo.
   Titles/logs can contain secrets, paths, or personal data. Require explicit opt-in,
   safe labels/redaction, and a clear publication policy. Persisted cards outlive
   the process; do not publish raw narrative by default.
@@ -171,14 +185,18 @@ Per-command OSC 133 cannot by itself identify which concurrent logical task ende
 
 ## Roadmap and open decisions
 
-1. Polish title + progress + lifecycle presentation first, retaining the current
-   privacy boundary unless safe activity publication is explicitly enabled.
-2. Add opt-in title-to-step history only if wanted, with documented producer
-   guarantees, bounded history, and tests for non-activity titles.
+1. Title + progress + lifecycle composition is now implemented for the bundled
+   fake agent with explicit activity publication. Visually validate its rich
+   Shell rendering before making new presentation claims.
+2. Default-off title-to-step history is implemented with documented producer
+   guarantees, bounded history, and tests for pre-command/repeated titles and
+   failure handling. Keep it opt-in; do not generalize it to arbitrary shell titles.
 3. Design negotiated structured metadata later, with explicit task identity,
    action/input policy, fallback behavior, and conformance tests.
 4. Consider a `microsoft/intelligent-terminal` fork/integration only after examining
-   its architecture and stream handling. No fork or integration is being made now.
+   its architecture and stream handling. [Pinned read-only findings](intelligent-terminal-integration.md)
+   now identify parser, pane-event, packaging, and activation seams. No fork or
+   integration is being made now.
 
 Key tradeoffs: title conventions are simple but ambiguous; structured metadata is
 precise but requires adoption and trust policy. Choose snapshot versus delta
