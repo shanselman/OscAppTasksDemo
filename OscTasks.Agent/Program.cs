@@ -1,27 +1,47 @@
+using System.Globalization;
+
 Console.OutputEncoding = new System.Text.UTF8Encoding(false);
 if (args.Contains("--help"))
 {
-    Console.WriteLine("Usage: OscTasks.Agent [success|failure|indeterminate|warning|unknown|crash] [--fast] [--synthetic-shell-markers]");
+    Console.WriteLine("Usage: OscTasks.Agent [success|failure|indeterminate|warning|unknown|crash|title-only|conversation] [--delay-ms 0..10000 | --fast] [--synthetic-shell-markers]");
     Console.WriteLine("Default: agent activity titles, progress and narrative; your shell owns OSC 133 lifecycle.");
     Console.WriteLine("--synthetic-shell-markers: direct-host TEST FIXTURE only. Do not combine with shell integration.");
     Console.WriteLine("The unknown scenario omits an outcome only in synthetic-marker mode; its real process exit is 0.");
+    Console.WriteLine("title-only/conversation emit no progress. conversation waits after its answer, then exits; no turn-completion signal.");
     return 0;
 }
-if (args.Count(a => !a.StartsWith("--", StringComparison.Ordinal)) > 1 ||
-    args.Any(a => a.StartsWith("--", StringComparison.Ordinal) && a is not ("--fast" or "--synthetic-shell-markers")))
+string? scenarioArgument = null;
+int delayMs = 1600;
+bool fast = false;
+bool hasDelay = false;
+bool syntheticShellMarkers = false;
+for (int i = 0; i < args.Length; i++)
 {
-    Console.Error.WriteLine("Invalid arguments. Use --help for supported options.");
+    string argument = args[i];
+    if (argument == "--fast" && !fast && !hasDelay) { fast = true; delayMs = 1; }
+    else if (argument == "--synthetic-shell-markers" && !syntheticShellMarkers) syntheticShellMarkers = true;
+    else if (argument == "--delay-ms" && !hasDelay && !fast && i + 1 < args.Length &&
+        int.TryParse(args[++i], NumberStyles.None, CultureInfo.InvariantCulture, out int parsedDelay) &&
+        parsedDelay is >= 0 and <= 10000)
+    {
+        hasDelay = true;
+        delayMs = parsedDelay;
+    }
+    else if (!argument.StartsWith("--", StringComparison.Ordinal) && scenarioArgument is null)
+        scenarioArgument = argument;
+    else
+    {
+        Console.Error.WriteLine("Invalid or conflicting arguments. Use --help for supported options.");
+        return 64;
+    }
+}
+string scenario = scenarioArgument ?? "success";
+if (scenario is not ("success" or "failure" or "indeterminate" or "warning" or "unknown" or "crash" or "title-only" or "conversation"))
+{
+    Console.Error.WriteLine("Unknown scenario. Use --help for supported scenarios.");
     return 64;
 }
-string scenario = args.FirstOrDefault(a => !a.StartsWith("--", StringComparison.Ordinal)) ?? "success";
-if (scenario is not ("success" or "failure" or "indeterminate" or "warning" or "unknown" or "crash"))
-{
-    Console.Error.WriteLine("Scenario must be success, failure, indeterminate, warning, unknown, or crash.");
-    return 64;
-}
-bool fast = args.Contains("--fast");
-bool syntheticShellMarkers = args.Contains("--synthetic-shell-markers");
-async Task Pause() => await Task.Delay(fast ? 1 : 1600);
+async Task Pause() => await Task.Delay(delayMs);
 void Osc(string payload, bool st = false)
 {
     Console.Write($"\x1b]{payload}{(st ? "\x1b\\" : "\a")}");
@@ -46,6 +66,24 @@ if (syntheticShellMarkers)
 }
 await Pause();
 ShellMarker("133;C", true);
+if (scenario is "title-only" or "conversation")
+{
+    Console.WriteLine("Generic session fixture: titles are display metadata, not steps, progress or agent turns.");
+    Osc("2;Sample session");
+    await Pause();
+    Osc("2;Sample response");
+    Osc("2;Sample response", true);
+    Console.WriteLine("Simulated answer: the sample is ready. No files were changed.");
+    await Pause();
+    Osc("2;Sample session available", true);
+    Console.WriteLine("The foreground process is still open. Session active does not mean working or waiting for required input.");
+    if (scenario == "conversation")
+        await Task.Delay(fast || delayMs == 0 ? delayMs : Math.Max(2000, delayMs * 3));
+    else await Pause();
+    Console.WriteLine("Bounded session interval finished; exiting normally now.");
+    ShellMarker("133;D;0", true);
+    return 0;
+}
 Osc("2;Inspecting project");
 Console.WriteLine("Reading sample inputs. UTF-8 check: café.");
 Osc("9;4;1;10");

@@ -1,6 +1,11 @@
+[CmdletBinding(DefaultParameterSetName = 'Host')]
 param(
+    [Parameter(ParameterSetName = 'Host')]
     [switch]$BuildOnly,
+    [Parameter(ParameterSetName = 'Test', Mandatory)]
     [switch]$Test,
+    [Parameter(ParameterSetName = 'Agent', Mandatory)]
+    [switch]$AgentOnly,
     [ValidateSet('x64', 'ARM64')][string]$Platform = 'x64'
 )
 $ErrorActionPreference = 'Stop'
@@ -13,8 +18,16 @@ function Assert-Exit([string]$Step) {
 if ($Test) {
     dotnet build .\OscTasks.Agent -v quiet
     Assert-Exit 'Agent build'
-    dotnet run --project .\OscTasks.Tests -- .\OscTasks.Agent\bin\Debug\net10.0\OscTasks.Agent.dll
+    $powershellPath = (Get-Process -Id $PID).Path
+    dotnet run --project .\OscTasks.Tests -- .\OscTasks.Agent\bin\Debug\net10.0\OscTasks.Agent.dll "$PSScriptRoot\Show-Demo.ps1" $powershellPath
     Assert-Exit 'Parser/lifecycle/process tests'
+    exit 0
+}
+
+$rid = 'win-' + $Platform.ToLowerInvariant()
+if ($AgentOnly) {
+    dotnet publish .\OscTasks.Agent -c Debug -r $rid --self-contained false -o .\artifacts\agent -v quiet
+    Assert-Exit 'Agent publish'
     exit 0
 }
 
@@ -27,7 +40,6 @@ if ((Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelU
     throw 'Developer Mode must be enabled. Run /winui-setup.'
 }
 
-$rid = 'win-' + $Platform.ToLowerInvariant()
 dotnet publish .\OscTasks.Agent -c Debug -r $rid --self-contained false -o .\artifacts\agent -v quiet
 Assert-Exit 'Agent publish'
 dotnet build .\OscTasks.Host -p:Platform=$Platform -p:RuntimeIdentifier=$rid -v minimal

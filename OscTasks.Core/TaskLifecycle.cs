@@ -9,12 +9,13 @@ public sealed record TaskSnapshot(RunState State, int? Percent, bool IsIndetermi
     public bool IsTerminal => State is RunState.Completed or RunState.Error or RunState.Unknown or RunState.Cancelled;
     public string CurrentActivity { get; init; } = "";
     public bool IsTitleStepHistoryEnabled { get; init; }
+    public bool HasProgress { get; init; }
     public ImmutableArray<string> CompletedActivities { get; init; } = [];
     public int DroppedActivities { get; init; }
     public string ActivityStatus => CurrentActivity.Length == 0 ? Label :
         IsTerminal ? $"{CurrentActivity} / {State}" :
         IsIndeterminate ? $"{CurrentActivity} -- indeterminate" :
-        Percent is int percent ? $"{CurrentActivity} -- {percent}%" : CurrentActivity;
+        Percent is int percent ? $"{CurrentActivity} -- {percent}%" : $"{CurrentActivity} / Session active";
     public string ExecutingLabel => CurrentActivity.Length == 0 ? Label : $"{CurrentActivity} -- {Label}";
     public string StepHistory => !IsTitleStepHistoryEnabled ? "Title-to-step history OFF" :
         "OPT-IN title steps (not standard OSC semantics)\n" +
@@ -62,20 +63,21 @@ public sealed class TaskLifecycle
             return;
         }
         if (e.Kind == EventKind.Execute && Snapshot.State == RunState.Waiting)
-            Snapshot = Snapshot with { State = RunState.Running, Label = "Command execution began" };
+            Snapshot = Snapshot with { State = RunState.Running, Label = "Session active - foreground process is open" };
         if (Snapshot.State != RunState.Running) return;
         if (e.Kind == EventKind.Progress)
             Snapshot = Snapshot with
             {
                 Percent = e.Value is 0 or 3 ? null : e.Percent,
                 IsIndeterminate = e.Value == 3,
+                HasProgress = e.Value != 0,
                 Label = e.Value switch
                 {
-                    0 => "Progress cleared; still awaiting command outcome",
-                    1 => $"{e.Percent}% - still running, even at 100%",
-                    2 => $"{e.Percent}% - error-colored progress; outcome not yet known",
-                    3 => "Working - progress is indeterminate",
-                    4 => $"{e.Percent}% - warning; does not imply pause or input required",
+                    0 => "Session active - progress cleared; awaiting process outcome",
+                    1 => $"Working - {e.Percent}% from application progress; even 100% is not completion",
+                    2 => $"Working - {e.Percent}% error-colored application progress; outcome not yet known",
+                    3 => "Working - application progress is indeterminate",
+                    4 => $"Working - {e.Percent}% warning-colored application progress; no input request implied",
                     _ => Snapshot.Label
                 }
             };
@@ -101,7 +103,7 @@ public sealed class TaskLifecycle
             if (Snapshot.IsTitleStepHistoryEnabled)
                 Snapshot = Snapshot with { CurrentActivity = "" };
         }
-        Snapshot = Snapshot with { State = state, IsIndeterminate = false, Label = label };
+        Snapshot = Snapshot with { State = state, IsIndeterminate = false, HasProgress = false, Label = label };
         TerminalTransitions++;
     }
 

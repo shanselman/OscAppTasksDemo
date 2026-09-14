@@ -12,16 +12,22 @@ stdout, not a full terminal or another terminal application's output.
 
 It decodes OSC 0/2 titles, OSC 9;4 progress, and OSC 133 lifecycle markers. The fixed
 fake agent emits Inspecting project, Editing files, and Running tests as activity
-titles. The host explicitly publishes these sanitized labels plus progress to Shell,
-keeping its fixed group title and safe task route.
+titles. The host publishes these sanitized labels only after a separate,
+default-off privacy opt-in, keeping its fixed group title and safe task route.
+Generic title-only/conversation fixtures emit no progress and never infer steps.
 
-A visible, default-off **OPT-IN** checkbox enables a title-to-step convention.
+A separate, default-off legacy fixture checkbox enables a title-to-step convention
+only after publication opt-in, and not for the generic fixtures.
 Running cards use genuine `CreateSequenceOfSteps` content; final summaries preserve
 completed history and label interrupted activities unfinished. Successful lifecycle
 completion can finish the final activity; 100%, clear, and narrative cannot.
 History retains eight completed activities with an omitted count and resets per run.
 The reusable lifecycle defaults title publication and history off for arbitrary
 sources. Structured task events and concurrent tasks are **not** implemented.
+The native generic path treats titles purely as display metadata, with no
+title-step/brand/spinner/per-turn heuristic. Open sessions with no application
+progress say Session active; Working is qualified by OSC 9;4. See the
+[generic presenter and evidence note](generic-agent-demo.md).
 
 ## Compatible tier: title + progress + lifecycle
 
@@ -195,12 +201,13 @@ Per-command OSC 133 cannot by itself identify which concurrent logical task ende
 
 ## Roadmap and open decisions
 
-1. Title + progress + lifecycle composition is now implemented for the bundled
-   fake agent with explicit activity publication. Visually validate its rich
+1. Title + progress + lifecycle composition is implemented with a separate
+   default-off publication opt-in. Visually validate its rich
    Shell rendering before making new presentation claims.
 2. Default-off title-to-step history is implemented with documented producer
    guarantees, bounded history, and tests for pre-command/repeated titles and
-   failure handling. Keep it opt-in; do not generalize it to arbitrary shell titles.
+   failure handling. It remains a legacy standalone fixture option, unavailable
+   to generic title-only/conversation scenarios; do not generalize it to arbitrary shell titles.
 3. Design negotiated structured metadata later, with explicit task identity,
    action/input policy, fallback behavior, and conformance tests.
 4. Consider a `microsoft/intelligent-terminal` fork/integration only after examining

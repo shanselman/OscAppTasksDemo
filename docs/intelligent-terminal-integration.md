@@ -5,6 +5,14 @@ Read-only source inspection on 2026-09-14, pinned to
 No fork, clone, upstream modification, or integration was performed. These are
 source findings and a proposed integration path, not runtime verification.
 
+**Later implementation status:** a separate native peer has published the generic
+bridge/launcher in `shanselman/terminal` at
+[`055a2ce`](https://github.com/shanselman/terminal/commit/055a2ce8de96987c27dc604f86893a16a4e15c33),
+branch `demo/osc-app-tasks`. The findings below remain pinned reconnaissance of
+the upstream base, not claims that the fork still lacks a provider. See
+[generic presenter instructions](generic-agent-demo.md) for the coordinated
+launcher contract and current verification caveats.
+
 **Conclusion:** existing OSC parsing and pane routing provide useful attachment
 points. Start with a pane-scoped bridge in TerminalApp, a separate task-lifecycle
 registry, and a packaged Shell publisher. Do not build it on the aggregated

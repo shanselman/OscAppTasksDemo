@@ -20,8 +20,31 @@ For the implemented compatible activity/step tier and the separately proposed
 structured extension, see [Rich OSC task cards](docs/rich-osc-task-cards.md).
 For commit-pinned upstream attachment points and obstacles, see
 [intelligent-terminal integration findings](docs/intelligent-terminal-integration.md).
+For the generic model, calibrated real-agent observations, native handoff and
+presentation walkthrough, see [Generic agent demo](docs/generic-agent-demo.md).
 
-## Quick start
+## Present the generic demo
+
+```powershell
+.\Show-Demo.ps1 -Build
+```
+
+This runs the bounded, marker-free `conversation` fixture in the **current**
+terminal, publishing only the agent binary via `Demo.ps1 -AgentOnly`. It does not
+launch a native terminal or install a provider. Use the configured custom Terminal
+and integrated shell for Shell cards; an ordinary terminal just shows output.
+Application-title publication is a separate, default-off privacy opt-in.
+Other useful commands:
+
+```powershell
+.\Show-Demo.ps1 -Scenario title-only
+.\Show-Demo.ps1 -Scenario success -DelayMs 2000
+.\Show-Demo.ps1 -Scenario failure -DelayMs 2000
+.\Show-Demo.ps1 -Mode Standalone -Build
+.\Show-Demo.ps1 -ValidateOnly
+```
+
+## Standalone host quick start
 
 From this repository in PowerShell:
 
@@ -32,14 +55,16 @@ From this repository in PowerShell:
 This publishes the agent, builds the host, registers a development package with
 `winapp`, and launches it with package identity and debug-output capture. The
 command stays attached until the app closes. Choose a scenario, then **Run / replay**.
-The fixed fake agent's OSC 2 titles are published as activity labels. The visible
-**OPT-IN** checkbox is off by default: enable it before running only if you want
-title changes to imply completion of the preceding activity. This is an agreed
-demo convention, not standard OSC semantics.
+By default, Shell receives fixed labels, not application titles. A separate
+**OPT-IN: publish application titles** checkbox enables sanitized title display,
+with a privacy warning. The optional legacy step checkbox requires that opt-in
+and is disabled for `title-only`/`conversation`: generic titles are never steps or
+agent-turn outcomes. Both choices are locked during a run.
 
 ```powershell
 .\Demo.ps1 -Test         # Standalone parser/lifecycle/real-subprocess tests
 .\Demo.ps1 -BuildOnly    # Build only; does NOT refresh an installed package
+.\Demo.ps1 -AgentOnly    # Publish marker-free CLI; no WinUI/winapp prerequisites
 .\Demo.ps1 -Platform ARM64   # ARM64 build/run option; not validated on ARM64
 ```
 
@@ -126,13 +151,14 @@ No global alias changes or uninstallations are needed.
    pane is real captured stdout; the middle pane is decoded control traffic;
    the right pane contains real API return/readback information, **not** a
    painted imitation of the Shell.
-2. Select **success**, optionally enable **OPT-IN** title steps, and click
+2. Select **success**, enable title publication only if wanted, optionally enable
+   the separate legacy step convention, and click
    **Run / replay**. Activity titles change from Inspecting project to Editing
    files to Running tests; numeric progress moves through 10%, 45%, 65%, and 100%.
    A repeated Running tests title adds no extra step. Point out that the task
    stays running at 100% and after clear. Only `OSC 133;D;0` authorizes success.
-   With the checkbox off, activity/progress still appear, but there is no inferred
-   completed-step history. With it on, the bridge sends actual completed/executing
+   With title publication off, only fixed labels/progress appear in Shell. With
+   publication on but steps off, titles remain metadata. With both enabled, the bridge sends completed/executing
    steps through `AppTaskContent.CreateSequenceOfSteps`.
 3. Open the demo's taskbar task flyout. On supported Windows, inspect the genuine
    Completed card. Click **Show details** to activate the existing demo window
@@ -165,6 +191,8 @@ can report normally.
 | `unknown` | Finish marker with no exit code, process exits 0 | Unknown | Error, with unknown-outcome explanation |
 | `crash` | Simulated abrupt nonzero exit 7 without finish marker | Error | Error |
 | Cancel button | Host kills/reaps its child; work is not resumable | Cancelled | Error, with cancellation explanation |
+| `title-only` | Live generic titles; no progress; process eventually exits 0 | Completed only at process outcome | Completed |
+| `conversation` | Simulated answer, bounded waiting with process still open; no progress | Session active until exit, then Completed | Running until outcome, then Completed |
 
 The `crash` scenario simulates an unexpected process exit; it is not a native
 crash or crash-dump test. Unknown and Cancelled use Shell **Error** as an explicit
@@ -173,7 +201,7 @@ represented as successful, Paused, or NeedsAttention.
 
 | Wire sequence (BEL or ESC-backslash terminated) | Interpretation |
 |---|---|
-| `OSC 0;<title>` / `OSC 2;<title>` | Standard title metadata. The fixed demo explicitly treats in-command titles as activity; optional step inference is a separate convention. |
+| `OSC 0;<title>` / `OSC 2;<title>` | Standard title metadata. Publication requires a separate privacy opt-in; optional legacy step inference is not part of the generic path. |
 | `OSC 133;A` | Prompt begins. |
 | `OSC 133;B` | Command input begins; **not execution**. |
 | `OSC 133;C` | Execution/output begins; transition to Running. |
@@ -201,10 +229,16 @@ unknown outcome, and cancellation retain it as **unfinished**, never completed.
 
 ### Activity convention
 
-The reusable lifecycle defaults both title publication and step inference **off**
-for arbitrary sources. The fixed demo host explicitly enables title-as-activity
-and visibly discloses that these labels go to Shell. The checkbox separately
-enables title-to-step history for the next run and is locked during that run.
+The reusable lifecycle and host both default title publication and step inference
+**off**. The host exposes separate opt-ins; generic title-only/conversation fixtures
+cannot enable step inference. Only the legacy sequential fixtures promise the
+title-to-step convention below. The native generic bridge never uses that heuristic.
+
+With an observed foreground process open and no application progress, labels say
+**Session active**, not Working. Working is explicitly qualified by OSC 9;4
+application progress. Clear returns to Session active; an answer/title change is
+not a turn-completion or needs-attention signal. OSC 133 describes the foreground
+process, not the turns of an interactive agent.
 
 Only titles received after `OSC 133;C` can be activity transitions; pre-command
 branding/cwd titles remain metadata. Consecutive identical titles and empty titles
@@ -250,10 +284,11 @@ trust boundaries, and lifecycle policy. No fork or integration is included here.
 - Output is data, never input. The host uses `ProcessStartInfo.ArgumentList` with
   a fixed bundled executable, no shell, and no output-triggered command/URI execution.
   Stderr is drained separately and is not interpreted as OSC.
-- Host-generated scenario/state labels and the fixed fake agent's sanitized
-  activity titles go to Shell. Stdout narrative, stderr, and command lines do not.
-  For arbitrary sources, title publication requires a separate explicit lifecycle
-  opt-in; title-to-step inference requires another. This is privacy minimization,
+- Host-generated scenario/state labels go to Shell; sanitized application titles
+  do so only after explicit opt-in. Titles may contain private prompts or paths;
+  sanitization is not anonymization. Stdout narrative, stderr, and command lines
+  are not independently published. Legacy title-to-step inference requires another
+  opt-in and is excluded from generic fixtures. This is privacy minimization,
   not a security boundary against a malicious child falsifying titles/markers.
 - Cancellation and normal window close are wired to stop/reap the owned child
   process tree. Hard termination of the host itself is not covered by a Job Object;
@@ -294,7 +329,7 @@ Observed on **2026-09-14**, Windows **26H2 build 26340.9233**, Debug x64:
   Subsequent enumeration found created tasks. The adapter retains explicit null
   diagnostics because the documented return contract does not establish that
   null means empty.
-- `.\Demo.ps1 -Test` passed **176 assertions**, including UTF-8/BEL/ST split points,
+- `.\Demo.ps1 -Test` passed **216 assertions**, including UTF-8/BEL/ST split points,
   malformed/unknown/oversized/truncated sequences, strict progress parsing,
   ambiguity/idempotence, all six real subprocess scenarios, cancellation, and
   stream-consumer failure propagation/cleanup. Rich-activity tests cover publication
@@ -304,6 +339,10 @@ Observed on **2026-09-14**, Windows **26H2 build 26340.9233**, Debug x64:
   agent scenarios are verified to emit no OSC 133 markers and compose with
   harness-supplied shell lifecycle/real exit codes. Duplicate execution markers
   cannot reset an active invocation, and unknown CLI options are rejected.
+  Generic fixtures add no-progress/session waiting/title-as-metadata checks,
+  configurable bounded pacing, both lifecycle modes, and presenter argument
+  validation without UI launch. Actual presenter execution was checked for
+  agent-only publishing, no-marker/no-progress titles, exit propagation and cwd restoration.
 
 The original simple Completed/Failed cards above were visually observed.
 Subsequent direct WinUI inspection enabled the opt-in checkbox and ran success:
@@ -314,7 +353,8 @@ Completed with all three activities. The local activity history matched.
 This verifies the opt-in host interaction and reported API invocation/readback,
 **not the actual rich Shell flyout layout**, which has not been observed.
 
-**Not visually verified:** opt-in failure, indeterminate/warning/unknown/crash scenarios in the
+**Not visually verified:** the new default-off publication control and generic
+title-only/conversation host scenarios, opt-in failure, indeterminate/warning/unknown/crash scenarios in the
 host, Cancel/close-time process cleanup, Reset view, Clear demo tasks,
 HiddenByUser behavior, cold-start deep linking, restart/reboot recovery, unsupported
 Windows behavior, alternate DPI/themes/accessibility modes, ARM64, and Release.
@@ -331,6 +371,9 @@ panel's terminal result text; it does not change Shell content or lifecycle.
 It was built without redeploying the running app.
 The subsequent default-agent/synthetic-fixture separation was also built/tested
 without redeployment; the earlier UI observations predate that CLI-mode change.
+The generic presenter/privacy/session wording changes were likewise built/tested
+without redeployment. Native title-aware verification is tracked separately in
+the [generic demo note](docs/generic-agent-demo.md).
 
 ## First-party references
 

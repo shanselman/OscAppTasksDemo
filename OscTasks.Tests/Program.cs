@@ -1,4 +1,6 @@
 using System.Text;
+using System.Diagnostics;
+using System.Text.Json;
 using OscTasks.Core;
 
 int passed = 0;
@@ -74,7 +76,9 @@ var arbitrarySource = new TaskLifecycle();
 arbitrarySource.Accept(new(EventKind.Execute, ""));
 arbitrarySource.Accept(new(EventKind.Title, "private working directory"));
 Check(arbitrarySource.Snapshot.Title == "private working directory" &&
-      arbitrarySource.Snapshot.CurrentActivity == "" && arbitrarySource.Snapshot.CompletedActivities.IsEmpty,
+      arbitrarySource.Snapshot.CurrentActivity == "" && arbitrarySource.Snapshot.CompletedActivities.IsEmpty &&
+      !arbitrarySource.Snapshot.ExecutingLabel.Contains("private") &&
+      !arbitrarySource.Snapshot.ActivityStatus.Contains("private"),
       "arbitrary sources keep title publication and step inference off by default");
 bool rejectedImplicitPublication = false;
 try { _ = new TaskLifecycle(enableTitleStepHistory: true); }
@@ -157,7 +161,36 @@ Check(replaySteps.Snapshot.CurrentActivity.Length == 120 &&
       !replaySteps.Snapshot.CurrentActivity.Contains('\u202e') &&
       !replaySteps.Snapshot.CurrentActivity.Contains('\u0001'), "activity labels are sanitized and bounded");
 
-if (args.Length != 1) throw new ArgumentException("Pass the built agent DLL path for required real-process integration tests.");
+var genericSession = new TaskLifecycle(useTitleAsActivity: true);
+genericSession.Accept(new(EventKind.Execute, ""));
+genericSession.Accept(new(EventKind.Title, "Sample session"));
+genericSession.Accept(new(EventKind.Title, "Sample response"));
+genericSession.Accept(new(EventKind.Title, "Sample response"));
+genericSession.Accept(new(EventKind.Text, "Answer ready"));
+Check(genericSession.Snapshot.State == RunState.Running && !genericSession.Snapshot.HasProgress &&
+      genericSession.Snapshot.ActivityStatus == "Sample response / Session active" &&
+      genericSession.Snapshot.Label.StartsWith("Session active") &&
+      genericSession.Snapshot.CompletedActivities.IsEmpty,
+      "generic no-progress titles/answer do not imply working, completed steps or a finished turn");
+genericSession.Accept(new(EventKind.Progress, "", 1, 100));
+Check(genericSession.Snapshot.HasProgress && genericSession.Snapshot.Label.StartsWith("Working") &&
+      !genericSession.Snapshot.IsTerminal, "Working requires application progress; 100 does not finish session");
+genericSession.Accept(new(EventKind.Progress, "", 0, 0));
+Check(!genericSession.Snapshot.HasProgress && genericSession.Snapshot.Label.StartsWith("Session active") &&
+      genericSession.Snapshot.Percent is null && !genericSession.Snapshot.IsTerminal,
+      "progress clear returns to Session active rather than finishing");
+foreach (int style in new[] { 2, 4 })
+{
+    genericSession.Accept(new(EventKind.Progress, "", style, 55));
+    Check(genericSession.Snapshot.HasProgress && genericSession.Snapshot.State == RunState.Running,
+        $"style {style} is progress, not failure or needs-attention");
+}
+genericSession.Accept(new(EventKind.Finish, "", 0));
+Check(!genericSession.Snapshot.HasProgress && genericSession.Snapshot.State == RunState.Completed,
+    "only the foreground process outcome ends the generic session");
+
+if (args.Length is not (1 or 3))
+    throw new ArgumentException("Pass agent DLL, optionally followed by presenter script and PowerShell executable (Demo.ps1 -Test runs all checks).");
 foreach (var (scenario, expected) in new[]
 {
     ("success", RunState.Completed), ("failure", RunState.Error), ("indeterminate", RunState.Completed),
@@ -219,6 +252,57 @@ foreach (string scenario in new[] { "success", "failure", "indeterminate", "warn
 var invalidArguments = await AgentProcess.RunAsync("dotnet",
     [Path.GetFullPath(args[0]), "--not-a-real-option"], _ => { }, _ => { }, CancellationToken.None);
 Check(invalidArguments.ExitCode == 64, "unknown CLI options are rejected instead of silently changing fixture behavior");
+foreach (string[] options in new[]
+{
+    new[] { "--delay-ms" }, new[] { "--delay-ms", "-1" }, new[] { "--delay-ms", "10001" },
+    new[] { "--delay-ms", "bogus" }, new[] { "--delay-ms", "1", "--fast" },
+    new[] { "--fast", "--delay-ms", "1" }, new[] { "--delay-ms", "1", "--delay-ms", "2" }
+})
+{
+    var result = await AgentProcess.RunAsync("dotnet", new[] { Path.GetFullPath(args[0]) }.Concat(options),
+        _ => { }, _ => { }, CancellationToken.None);
+    Check(result.ExitCode == 64, $"invalid pacing rejected: {string.Join(' ', options)}");
+}
+foreach (string scenario in new[] { "title-only", "conversation" })
+foreach (bool fixture in new[] { false, true })
+{
+    var life = new TaskLifecycle(useTitleAsActivity: true);
+    if (!fixture) life.Accept(new(EventKind.Execute, "Surrounding shell C"));
+    var options = new List<string> { Path.GetFullPath(args[0]), scenario, "--delay-ms", "0" };
+    if (fixture) options.Add("--synthetic-shell-markers");
+    int progressEvents = 0, lifecycleEvents = 0;
+    bool sawAnswerOpen = false, sawWaitingOpen = false;
+    var titles = new List<string>();
+    var result = await AgentProcess.RunAsync("dotnet", options, e =>
+    {
+        life.Accept(e);
+        if (e.Kind == EventKind.Progress) progressEvents++;
+        if (e.Kind is EventKind.Prompt or EventKind.Input or EventKind.Execute or EventKind.Finish) lifecycleEvents++;
+        if (e.Kind == EventKind.Title) titles.Add(e.Detail);
+        if (e.Kind == EventKind.Text && e.Detail.Contains("Simulated answer:"))
+            sawAnswerOpen = life.Snapshot.State == RunState.Running && !life.Snapshot.HasProgress;
+        if (e.Kind == EventKind.Text && e.Detail.Contains("foreground process is still open"))
+            sawWaitingOpen = life.Snapshot.State == RunState.Running && life.Snapshot.Label.StartsWith("Session active");
+    }, _ => { }, CancellationToken.None);
+    if (!fixture) life.Accept(new(EventKind.Finish, "", result.ExitCode));
+    life.Disconnect(result.ExitCode);
+    Check(progressEvents == 0 && lifecycleEvents == (fixture ? 4 : 0),
+        $"{scenario} fixture={fixture}: no progress and correct lifecycle ownership");
+    Check(titles.SequenceEqual(new[] { "Sample session", "Sample response", "Sample response", "Sample session available" }),
+        $"{scenario} fixture={fixture}: generic title changes preserve repeats without spinner parsing");
+    Check(sawAnswerOpen && sawWaitingOpen && life.Snapshot.CompletedActivities.IsEmpty,
+        $"{scenario} fixture={fixture}: answer/waiting stays active with no inferred steps");
+    Check(life.TerminalTransitions == 1 && life.Snapshot.State == RunState.Completed,
+        $"{scenario} fixture={fixture}: only process completion ends session");
+}
+using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
+{
+    var clock = Stopwatch.StartNew();
+    var result = await AgentProcess.RunAsync("dotnet",
+        [Path.GetFullPath(args[0]), "conversation", "--delay-ms", "1"], _ => { }, _ => { }, deadline.Token);
+    Check(result.ExitCode == 0 && !result.WasCancelled && clock.Elapsed >= TimeSpan.FromSeconds(2),
+        "normal conversation pacing includes bounded visible waiting of at least two seconds");
+}
 using (var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(400)))
 {
     var life = new TaskLifecycle();
@@ -240,4 +324,41 @@ using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
     }
     Check(consumerErrorObserved && !deadline.IsCancellationRequested, "stream consumer failure is propagated and child is reaped");
 }
+if (args.Length == 3)
+{
+    string presenter = Path.GetFullPath(args[1]);
+    string powershell = Path.GetFullPath(args[2]);
+    foreach (string[] options in new[]
+    {
+        new[] { "-Mode", "Invalid" }, new[] { "-Scenario", "not-a-scenario" },
+        new[] { "-DelayMs", "-1" }, new[] { "-DelayMs", "10001" },
+        new[] { "-Mode", "Standalone", "-Scenario", "success" },
+        new[] { "-Mode", "Standalone", "-DelayMs", "1" }
+    })
+    {
+        var result = await AgentProcess.RunAsync(powershell,
+            new[] { "-NoProfile", "-File", presenter, "-ValidateOnly" }.Concat(options),
+            _ => { }, _ => { }, CancellationToken.None);
+        Check(result.ExitCode != 0, $"presenter rejects invalid arguments without launching: {string.Join(' ', options)}");
+    }
+    foreach (string mode in new[] { "Terminal", "Standalone" })
+    {
+        var json = new StringBuilder();
+        var result = await AgentProcess.RunAsync(powershell,
+            ["-NoProfile", "-File", presenter, "-Mode", mode, "-Build", "-ValidateOnly"],
+            e => { if (e.Kind == EventKind.Text) json.Append(e.Detail); }, _ => { }, CancellationToken.None);
+        using var plan = JsonDocument.Parse(json.ToString());
+        var root = plan.RootElement;
+        Check(result.ExitCode == 0 && root.GetProperty("BuildRequested").GetBoolean() &&
+              root.GetProperty("BuildArguments")[0].GetString() == (mode == "Terminal" ? "-AgentOnly" : "-BuildOnly"),
+              $"presenter {mode} validates its existing build entrypoint without executing it");
+        var command = root.GetProperty("Arguments").EnumerateArray().Select(v => v.GetString()).ToArray();
+        Check(mode == "Terminal"
+            ? command.SequenceEqual(new[] { "conversation", "--delay-ms", "1600" }) &&
+              root.GetProperty("Executable").GetString()!.EndsWith(@"artifacts\agent\OscTasks.Agent.exe")
+            : command[0] == "run" && root.GetProperty("Executable").GetString() == "winapp",
+            $"presenter {mode} uses marker-free agent or packaged host launcher correctly");
+    }
+}
+else Console.WriteLine("Presenter checks not requested; use Demo.ps1 -Test to include them.");
 Console.WriteLine($"All {passed} assertions passed.");

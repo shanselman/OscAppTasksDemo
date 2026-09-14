@@ -145,7 +145,8 @@ public sealed partial class MainPage : Page
     {
         RunButton.IsEnabled = !running;
         Scenario.IsEnabled = !running;
-        TitleSteps.IsEnabled = !running;
+        PublishTitles.IsEnabled = !running;
+        UpdateTitleOptions();
         CancelButton.IsEnabled = running;
         ResetButton.IsEnabled = !running;
         ClearButton.IsEnabled = !running && _shell.Status.IsSupported;
@@ -160,7 +161,7 @@ public sealed partial class MainPage : Page
         {
             _output.Clear();
             _events.Clear();
-            _lifecycle = new(useTitleAsActivity: true, enableTitleStepHistory: TitleSteps.IsChecked == true);
+            _lifecycle = new(useTitleAsActivity: PublishTitles.IsChecked == true, enableTitleStepHistory: TitleSteps.IsChecked == true);
             _lastPublished = null;
             _droppedEvents = 0;
             _trimmedOutput = false;
@@ -174,6 +175,17 @@ public sealed partial class MainPage : Page
     {
         _shell.ClearOwnedTasks();
         ShowShellStatus();
+    }
+
+    private void TitleOptions_Changed(object sender, RoutedEventArgs e) => UpdateTitleOptions();
+
+    private void UpdateTitleOptions()
+    {
+        if (PublishTitles is null || TitleSteps is null || Scenario is null) return;
+        bool canInferSteps = PublishTitles.IsChecked == true &&
+            Scenario.SelectedItem is string scenario && scenario is not ("title-only" or "conversation");
+        if (!canInferSteps) TitleSteps.IsChecked = false;
+        TitleSteps.IsEnabled = canInferSteps && _cancellation is null;
     }
 
     public void ActivateTask(Uri uri)
